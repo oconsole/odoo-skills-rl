@@ -1,0 +1,211 @@
+{
+  "general_skills": [
+    {
+      "id": "GS-001",
+      "title": "Verify Before Mutating",
+      "principle": "Always read the current state of an Odoo record before creating, updating, or deleting it. Confirm the operation with the user when it affects production data.",
+      "application": "Before any write/create/delete call, do a search_read to confirm the target exists and is in the expected state. Ask for explicit user confirmation on destructive operations."
+    },
+    {
+      "id": "GS-002",
+      "title": "Use Domain Filters Precisely",
+      "principle": "Construct Odoo domains with the most specific filters possible to avoid retrieving excessive data or acting on wrong records.",
+      "application": "Always include state, type, and date filters when querying models like account.move, stock.picking, or sale.order. Prefer exact matches over broad searches."
+    },
+    {
+      "id": "GS-003",
+      "title": "Check Model Availability",
+      "principle": "Not all Odoo models are available on every instance \u2014 modules may not be installed. Verify model existence before querying.",
+      "application": "Use odoo_list_models or odoo_get_fields to confirm the model exists. If a model is missing, explain which module needs to be installed."
+    },
+    {
+      "id": "GS-004",
+      "title": "Batch Operations Safely",
+      "principle": "When processing multiple records, work in small batches and report progress. Never process unbounded result sets in a single call.",
+      "application": "Limit search_read results with a reasonable limit (50-100). For write operations on many records, process in chunks of 10-20 and confirm intermediate results."
+    },
+    {
+      "id": "GS-005",
+      "title": "Interpret Odoo Errors Contextually",
+      "principle": "Odoo errors often contain technical tracebacks. Translate them into actionable explanations for the user, identifying the root cause and suggesting fixes.",
+      "application": "When an RPC call fails, parse the error message for common patterns (access rights, missing fields, constraint violations) and explain in plain language."
+    },
+    {
+      "id": "GS-006",
+      "title": "Respect the Odoo Workflow",
+      "principle": "Odoo records follow state machines (draft -> confirmed -> done). Never skip states by directly writing state fields \u2014 use the appropriate action methods.",
+      "application": "Use action_post for invoices, action_confirm for sale orders, button_validate for stock pickings. Never write {'state': 'posted'} directly."
+    },
+    {
+      "id": "GS-007",
+      "title": "Progressive Field Discovery",
+      "principle": "When working with unfamiliar models or investigating data quality, use odoo_get_fields first to understand available fields before querying records.",
+      "application": "Start with odoo_get_fields to see field types and relationships, then construct targeted search_read queries with only the fields needed for analysis."
+    },
+    {
+      "id": "GS-008",
+      "title": "Multi-Angle Investigation",
+      "principle": "For thorough analysis, examine the same issue from multiple perspectives using related models and cross-references.",
+      "application": "When checking module states, also query ir.module.module.dependency for dependency issues. When auditing cron jobs, check both ir.cron and ir.logging for execution history."
+    },
+    {
+      "id": "GS-009",
+      "title": "Combine Diagnostic Tools Strategically",
+      "principle": "Use odoo_doctor as the initial broad sweep, then follow up with targeted model queries to drill into specific findings. This two-phase approach is more efficient than single-tool queries.",
+      "application": "Start with odoo_doctor to get a system overview. Based on its output, use odoo_search_read on specific models (ir.cron, ir.module.module, ir.logging) to investigate flagged areas in detail."
+    },
+    {
+      "id": "GS-010",
+      "title": "Aggregate and Summarize for Clarity",
+      "principle": "When presenting findings from multiple queries, organize results into categorized tables or summaries (OK / Warning / Critical) to help users quickly identify priorities.",
+      "application": "Group related findings by severity level. Present counts, totals, and key metrics in tabular format. Highlight critical items first, then warnings, then informational items."
+    },
+    {
+      "id": "GS-011",
+      "title": "Temporal Filtering for Audit Trails",
+      "principle": "When investigating recent events or changes, use date/time filters to narrow scope and improve query performance. Always specify time windows for audit queries.",
+      "application": "Use create_date, write_date, or custom date fields with comparison operators (>, <, >=, <=). For 24-hour lookbacks, calculate datetime.now() - timedelta(hours=24). Include timezone awareness in date comparisons."
+    },
+    {
+      "id": "GS-012",
+      "title": "Leverage search_count for Efficiency",
+      "principle": "When you only need to know the quantity of records matching a condition, use search_count instead of search_read to reduce data transfer and improve performance.",
+      "application": "Use odoo_search_count to get record counts before deciding whether to fetch full details. Useful for reporting metrics, detecting anomalies (e.g., 'are there any negative stock records?'), and validating data quality thresholds."
+    },
+    {
+      "id": "GS-013",
+      "title": "Combine Count and Detail Queries Strategically",
+      "principle": "Use search_count first to assess scope, then conditionally fetch details only if counts warrant investigation. This reduces unnecessary data transfer.",
+      "application": "Query search_count with a filter to get magnitude of issue. If count is high, fetch details with limit and offset. If count is zero, report 'no issues found' immediately without additional queries."
+    },
+    {
+      "id": "GS-014",
+      "title": "Cross-Reference Related Models for Completeness",
+      "principle": "When investigating a specific model (e.g., ir.cron), always check related audit/logging models (ir.logging) to get the full picture of recent activity and failures.",
+      "application": "For cron jobs, query both ir.cron (state) and ir.logging (execution history). For modules, query both ir.module.module (state) and ir.module.module.dependency (dependency health). This reveals hidden issues."
+    },
+    {
+      "id": "GS-015",
+      "title": "Build Dependency Graphs Iteratively",
+      "principle": "When exploring dependency relationships (e.g., module dependencies), query parent-child relationships iteratively rather than trying to fetch the entire tree at once.",
+      "application": "Start with a target module, fetch its direct dependencies via ir.module.module.dependency. For each dependency, recursively fetch its dependencies. Use a visited set to avoid cycles. Present results as a hierarchical structure or adjacency list."
+    },
+    {
+      "id": "GS-016",
+      "title": "Validate Data Consistency Across Related Models",
+      "principle": "When investigating module or system state, cross-validate findings across multiple related models to detect inconsistencies that indicate deeper issues.",
+      "application": "For module checks: verify state in ir.module.module matches expected installation status, check ir.module.module.dependency for broken links, and query ir.model for orphaned model definitions. Report any mismatches as warnings."
+    },
+    {
+      "id": "GS-017",
+      "title": "Optimize Query Sequences with Early Termination",
+      "principle": "Structure diagnostic queries to fail fast: use search_count to detect zero-result conditions before fetching full records, avoiding unnecessary data transfer.",
+      "application": "When investigating a category of issues (e.g., error logs), first search_count to determine if any records exist. If count is 0, report immediately. If count is high, fetch with limit. This pattern saves round-trips."
+    },
+    {
+      "id": "GS-018",
+      "title": "Understand Field Metadata for Customization",
+      "principle": "When customizing models (defaults, views, actions), use odoo_get_fields to understand field properties (required, readonly, selection values) before making changes.",
+      "application": "Always call odoo_get_fields on the target model first. Review field types, constraints, and relationships. This prevents setting invalid defaults or modifying incompatible fields. Essential for ir.default and window action modifications."
+    },
+    {
+      "id": "GS-019",
+      "title": "Use odoo_model_info for Structural Insights",
+      "principle": "When investigating model structure, defaults, or view configurations, odoo_model_info provides a comprehensive overview faster than multiple targeted queries.",
+      "application": "Call odoo_model_info early in model-customization tasks to see default values, field ordering, and related metadata. Use this to inform subsequent odoo_get_fields and odoo_search_read calls. Reduces exploration turns."
+    },
+    {
+      "id": "GS-020",
+      "title": "Leverage odoo_modify_action for View and Context Customization",
+      "principle": "Window actions control sorting, filtering, grouping, and default context. Use odoo_modify_action to adjust these without code changes, enabling rapid customization.",
+      "application": "For sorting: modify the 'order' key in context. For filtering: add domain constraints. For grouping: set 'group_by' in context. Always verify the action exists and is the correct type (ir.actions.act_window) before modifying."
+    }
+  ],
+  "task_specific_skills": [
+    {
+      "id": "TS-MC-001",
+      "category": "model-customize",
+      "title": "Set Field Defaults via ir.default",
+      "principle": "Use ir.default records to establish global or user-specific default values for model fields without code changes.",
+      "application": "Call odoo_set_default with model name, field name, and value. Verify the field exists and accepts the value type. For selection fields, ensure the value is in the field's selection list. Always confirm the default was set by querying ir.default afterward."
+    },
+    {
+      "id": "TS-MC-002",
+      "category": "model-customize",
+      "title": "Modify Window Actions for View Customization",
+      "principle": "Window actions (ir.actions.act_window) control how models are displayed: sorting order, default filters, grouping, and context variables. Modify these to customize user experience without touching model code.",
+      "application": "Use odoo_modify_action to update 'order' (sorting), 'domain' (filtering), and 'context' (grouping, defaults). Always fetch the action first to understand its current state. Test modifications by verifying the action's updated fields."
+    },
+    {
+      "id": "TS-MC-003",
+      "category": "model-customize",
+      "title": "Investigate Field Relationships and Dependencies",
+      "principle": "Many2one, One2many, and Many2many fields create relationships between models. Understanding these is critical for customization and data integrity.",
+      "application": "Use odoo_get_fields to identify relationship fields and their target models. For Many2one fields, check the 'relation' property to see which model they reference. Use odoo_search_read to verify related records exist and are in expected states."
+    },
+    {
+      "id": "TS-MC-004",
+      "category": "model-customize",
+      "title": "Distinguish Between Runtime and Code-Level Customizations",
+      "principle": "Some Odoo features (like _order) are defined in Python code and cannot be changed at runtime. Others (like window action sorting) can be customized via database records.",
+      "application": "When asked to modify a model attribute, first check if it's a database-backed feature (ir.default, ir.actions.act_window, ir.ui.view) or a code-level attribute (_order, _name, _description). For code-level changes, explain that a custom module is required. For database features, use the appropriate tool."
+    },
+    {
+      "id": "TS-MC-005",
+      "category": "model-customize",
+      "title": "Comprehensively Explore Related Customization Data",
+      "principle": "Model customization often involves multiple related records (ir.default, ir.actions.act_window, ir.ui.view). Always check all related areas to provide complete context.",
+      "application": "When investigating a model's customization state, query: (1) odoo_get_fields for field definitions, (2) ir.default for field defaults, (3) ir.actions.act_window for view actions, (4) ir.ui.view for view definitions. Present findings in a unified summary."
+    }
+  ],
+  "common_mistakes": [
+    {
+      "id": "CM-001",
+      "mistake": "Skipping odoo_get_fields before querying or modifying a model",
+      "consequence": "Attempting to query non-existent fields, setting invalid defaults, or misunderstanding field types and constraints.",
+      "prevention": "Always call odoo_get_fields as the first step when working with an unfamiliar model. Review field types, required status, and selection values before proceeding."
+    },
+    {
+      "id": "CM-002",
+      "mistake": "Directly writing state fields instead of using workflow action methods",
+      "consequence": "Bypassing workflow validations, creating inconsistent record states, and triggering errors in dependent processes.",
+      "prevention": "Always use the appropriate action method (action_post, action_confirm, button_validate) instead of directly writing the state field. Verify the action exists on the model before calling it."
+    },
+    {
+      "id": "CM-003",
+      "mistake": "Fetching large result sets without limits or pagination",
+      "consequence": "Excessive data transfer, slow queries, and potential timeouts or memory issues.",
+      "prevention": "Always include a limit parameter in search_read calls (50-100 records). Use search_count first to assess result set size. For large datasets, use offset and limit for pagination."
+    },
+    {
+      "id": "CM-004",
+      "mistake": "Not verifying model existence before querying",
+      "consequence": "Errors when querying models from uninstalled modules, wasting turns and confusing users.",
+      "prevention": "Call odoo_list_models or odoo_get_fields to confirm the model exists. If missing, identify the required module and explain installation steps."
+    },
+    {
+      "id": "CM-005",
+      "mistake": "Ignoring related models and audit trails during investigation",
+      "consequence": "Incomplete analysis, missed root causes, and incorrect recommendations.",
+      "prevention": "Always check related models (ir.default, ir.logging, ir.module.module.dependency) when investigating a specific model. Cross-reference findings across multiple sources."
+    },
+    {
+      "id": "CM-006",
+      "mistake": "Setting invalid values for selection or Many2one fields",
+      "consequence": "Constraint violations, failed writes, and confusing error messages.",
+      "prevention": "Before setting a default or field value, verify it's valid: for selection fields, check the field's selection list; for Many2one fields, confirm the referenced record exists."
+    },
+    {
+      "id": "CM-007",
+      "mistake": "Modifying window actions without first fetching and understanding the current state",
+      "consequence": "Overwriting existing customizations, losing important filters or sorting, or applying changes to the wrong action.",
+      "prevention": "Always fetch the action with odoo_search_read before modifying it. Review its current 'domain', 'order', and 'context' fields. Merge changes carefully to preserve existing customizations."
+    },
+    {
+      "id": "CM-008",
+      "mistake": "Assuming all Odoo instances have the same modules installed",
+      "consequence": "Queries fail when models or fields don't exist, wasting turns and requiring recovery.",
+      "prevention": "Always verify model and field availability early. Use odoo_list_models and odoo_get_fields defensively. Explain which modules are required if features are missing."
+    }
+  ]
+}

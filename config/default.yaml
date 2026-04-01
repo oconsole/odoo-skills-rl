@@ -1,0 +1,61 @@
+# SkillRL Configuration for OdooCLI
+# Hydra-style config for RL training with skill injection
+
+# --- Model ---
+model:
+  path: null  # Set via MODEL_PATH env var or override here
+  tokenizer: null  # Defaults to model path
+
+# --- Odoo Environment ---
+environment:
+  odoo_url: "http://13.210.13.41:8069"
+  odoo_db: "odoo-clawd-19"
+  odoo_user: "admin"
+  # Task categories to train on
+  task_categories:
+    - health-check
+    - deploy-module
+    - backup-restore
+    - inventory-audit
+    - invoice-posting
+
+# --- Trajectory Generation ---
+trajectory:
+  output_dir: "skill_rl/memory_data"
+  num_episodes: 100
+  max_turns_per_episode: 20
+  compress: true
+  target_max_tokens: 15250
+
+# --- Skill Bank ---
+skills:
+  skills_json_path: "skill_rl/skill_bank/odoo_skills.json"
+  retrieval_mode: "template"  # "template" or "embedding"
+  embedding_model_path: "Qwen/Qwen3-Embedding-0.6B"
+  top_k: 6
+  task_specific_top_k: 5
+  enable_dynamic_update: true
+  update_threshold: 0.4
+  max_new_skills: 3
+
+# --- RL Training ---
+training:
+  algorithm: "grpo"  # "grpo" or "ppo"
+  learning_rate: 1.0e-6
+  num_epochs: 3
+  batch_size: 4
+  rollout_batch_size: 8
+  kl_coef: 0.05
+  gamma: 1.0
+  reward:
+    task_completion: 1.0
+    partial_progress: 0.3
+    safety_violation: -1.0
+    efficiency_bonus: 0.1
+
+# --- Logging ---
+logging:
+  output_dir: "skill_rl/runs"
+  log_interval: 10
+  save_interval: 50
+  eval_interval: 25
