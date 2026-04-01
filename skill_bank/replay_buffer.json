@@ -1,0 +1,409 @@
+[
+  {
+    "task": "Change the sale order list view to sort by date_order descending by modifying the window action.",
+    "category": "model-customize",
+    "reward": 1.0,
+    "tool_calls": [
+      {
+        "tool": "odoo_modify_action",
+        "args": {
+          "model": "sale.order"
+        },
+        "result_preview": "{\"actions\": [{\"id\": 695, \"name\": \"Abandoned Carts\", \"domain\": \"[('is_abandoned_cart', '=', 1)]\", \"context\": \"{'show_sale': True, 'create': False, 'public_partner_id': 4, 'search_default_recovery_email"
+      },
+      {
+        "tool": "odoo_modify_action",
+        "args": {
+          "action_id": 329,
+          "order": "date_order desc"
+        },
+        "result_preview": "{\"action_id\": 329, \"name\": \"Quotations\", \"operation\": \"updated\", \"before\": {\"domain\": false, \"context\": \"{'search_default_my_quotation': 1}\", \"view_mode\": \"list,kanban,form,calendar,pivot,graph,activi"
+      },
+      {
+        "tool": "odoo_modify_action",
+        "args": {
+          "action_id": 330,
+          "order": "date_order desc"
+        },
+        "result_preview": "{\"action_id\": 330, \"name\": \"Quotations\", \"operation\": \"updated\", \"before\": {\"domain\": false, \"context\": \"{'search_default_my_quotation': 1}\", \"view_mode\": \"list,kanban,form,calendar,pivot,graph,activi"
+      },
+      {
+        "tool": "odoo_modify_action",
+        "args": {
+          "action_id": 331,
+          "order": "date_order desc"
+        },
+        "result_preview": "{\"action_id\": 331, \"name\": \"Orders to Invoice\", \"operation\": \"updated\", \"before\": {\"domain\": \"[('invoice_status','=','to invoice')]\", \"context\": \"{'create': False}\", \"view_mode\": \"list,form,calendar,g"
+      },
+      {
+        "tool": "odoo_modify_action",
+        "args": {
+          "action_id": 332,
+          "order": "date_order desc"
+        },
+        "result_preview": "{\"action_id\": 332, \"name\": \"Orders to Upsell\", \"operation\": \"updated\", \"before\": {\"domain\": \"[('invoice_status','=','upselling')]\", \"context\": \"{'create': False}\", \"view_mode\": \"list,form,calendar,gra"
+      }
+    ],
+    "final_response": "\u2705 **Window actions updated successfully**\n\nI've modified the sale order window actions to sort by `date_order desc`. Here's what changed:\n\n| Action ID | Action Name | Before | After |\n|-----------|-------------|--------|-------|\n| **329** | Quotations | No default_order | `default_order: 'date_order desc'` |\n| **330** | Quotations | No default_order | `default_order: 'date_order desc'` |\n| **331** | Orders to Invoice | No default_order | `default_order: 'date_order desc'` |\n| **332** | Orders to Upsell | No default_order | `default_order: 'date_order desc'` |\n\n**Note:** Action 691 (\"Orders\") already had `date_order desc` set, so no change was needed there.\n\nNow when users open any of these sale order list views, they will be sorted by date order in descending order (newest first) by default."
+  },
+  {
+    "task": "Show the current _order attribute for sale.order. Explain whether it can be changed at runtime or needs a custom module.",
+    "category": "model-customize",
+    "reward": 0.9800000000000001,
+    "tool_calls": [
+      {
+        "tool": "odoo_model_info",
+        "args": {
+          "model": "sale.order"
+        },
+        "result_preview": "{\"error\": \"Odoo error: Invalid field 'rec_name' on 'ir.model'\"}"
+      },
+      {
+        "tool": "odoo_search_read",
+        "args": {
+          "model": "ir.model",
+          "fields": [
+            "model",
+            "name"
+          ],
+          "domain": [
+            [
+              "model",
+              "=",
+              "sale.order"
+            ]
+          ]
+        },
+        "result_preview": "{\"model\": \"ir.model\", \"count\": 1, \"records\": [{\"id\": 533, \"model\": \"sale.order\", \"name\": \"Sales Order\"}]}"
+      },
+      {
+        "tool": "odoo_get_fields",
+        "args": {
+          "model": "sale.order"
+        },
+        "result_preview": "{\"model\": \"sale.order\", \"fields\": {\"id\": {}, \"display_name\": {}, \"campaign_id\": {}, \"source_id\": {}, \"medium_id\": {}, \"activity_ids\": {}, \"activity_state\": {}, \"activity_user_id\": {}, \"activity_type_i"
+      },
+      {
+        "tool": "odoo_modify_action",
+        "args": {
+          "model": "sale.order"
+        },
+        "result_preview": "{\"actions\": [{\"id\": 695, \"name\": \"Abandoned Carts\", \"domain\": \"[('is_abandoned_cart', '=', 1)]\", \"context\": \"{'show_sale': True, 'create': False, 'public_partner_id': 4, 'search_default_recovery_email"
+      }
+    ],
+    "final_response": "Perfect! Now I have the information. Let me explain:\n\n## Current `_order` Attribute for sale.order\n\nThe **model-level `_order` attribute** is a **Python class attribute** defined in the Odoo source code. Based on the window actions, I can see that different actions use different sort orders:\n\n| Action ID | Action Name | Current Sort Order |\n|-----------|-------------|-------------------|\n| **329** | Quotations | `date_order desc` |\n| **330** | Quotations | `date_order desc` |\n| **331** | Orders to Invoice | `date_order desc` |\n| **332** | Orders to Upsell | `date_order desc` |\n| **691** | Orders | `date_order desc` + grouped by `partner_id` |\n\n---\n\n## Can It Be Changed at Runtime?\n\n### \u274c **NO \u2014 The model-level `_order` cannot be changed at runtime**\n\n**Why?**\n- `_order` is a **Python class attribute** defined in the Odoo module source code\n- It's set when the module is loaded and is **not stored in the database**\n- Changing it requires modifying the Python code and restarting the Odoo "
+  },
+  {
+    "task": "Add a default groupby of 'partner_id' to the sale.order window action context.",
+    "category": "model-customize",
+    "reward": 0.9,
+    "tool_calls": [
+      {
+        "tool": "odoo_modify_action",
+        "args": {
+          "model": "sale.order"
+        },
+        "result_preview": "{\"actions\": [{\"id\": 695, \"name\": \"Abandoned Carts\", \"domain\": \"[('is_abandoned_cart', '=', 1)]\", \"context\": \"{'show_sale': True, 'create': False, 'public_partner_id': 4, 'search_default_recovery_email"
+      }
+    ],
+    "final_response": "Good! I can see there are multiple window actions for sale.order. I notice that action ID 691 (\"Orders\") already has `'group_by': 'partner_id'` in its context. \n\nLet me clarify: **Which window action would you like me to modify?** Here are the main ones:\n\n| Action ID | Name | Current Context |\n|-----------|------|-----------------|\n| **329** | Quotations | `{'search_default_my_quotation': 1, 'default_order': 'date_order desc'}` |\n| **330** | Quotations | `{'search_default_my_quotation': 1, 'default_order': 'date_order desc'}` |\n| **331** | Orders to Invoice | `{'create': False, 'default_order': 'date_order desc'}` |\n| **332** | Orders to Upsell | `{'create': False, 'default_order': 'date_order desc'}` |\n| **691** | Orders | Already has `'group_by': 'partner_id'` \u2713 |\n\nWould you like me to:\n1. **Add groupby to all of them** (except 691 which already has it)?\n2. **Add groupby to specific actions** (e.g., just Quotations)?\n3. **Replace the context** on a specific action?\n\nPlease let me kno"
+  },
+  {
+    "task": "What fields are available on sale.order? Show which ones are required vs optional.",
+    "category": "model-customize",
+    "reward": 0.88,
+    "tool_calls": [
+      {
+        "tool": "odoo_model_info",
+        "args": {
+          "model": "sale.order"
+        },
+        "result_preview": "{\"error\": \"Odoo error: Invalid field 'rec_name' on 'ir.model'\"}"
+      },
+      {
+        "tool": "odoo_get_fields",
+        "args": {
+          "model": "sale.order"
+        },
+        "result_preview": "{\"model\": \"sale.order\", \"fields\": {\"id\": {}, \"display_name\": {}, \"campaign_id\": {}, \"source_id\": {}, \"medium_id\": {}, \"activity_ids\": {}, \"activity_state\": {}, \"activity_user_id\": {}, \"activity_type_i"
+      },
+      {
+        "tool": "odoo_search_read",
+        "args": {
+          "model": "ir.model.fields",
+          "domain": [
+            [
+              "model_id.model",
+              "=",
+              "sale.order"
+            ]
+          ],
+          "fields": [
+            "name",
+            "field_description",
+            "ttype",
+            "required",
+            "readonly",
+            "help"
+          ],
+          "limit": 200
+        },
+        "result_preview": "{\"model\": \"ir.model.fields\", \"count\": 152, \"records\": [{\"id\": 6532, \"name\": \"access_token\", \"field_description\": \"Security Token\", \"ttype\": \"char\", \"required\": false, \"readonly\": false, \"help\": false}"
+      }
+    ],
+    "final_response": "Perfect! Here's a comprehensive breakdown of **sale.order** fields organized by requirement status:\n\n## \ud83d\udccb Required Fields (Must be filled)\n\n| Field Name | Type | Description |\n|------------|------|-------------|\n| **name** | char | Order Reference |\n| **partner_id** | many2one | Customer |\n| **date_order** | datetime | Order Date |\n| **company_id** | many2one | Company |\n| **partner_invoice_id** | many2one | Invoice Address |\n| **partner_shipping_id** | many2one | Delivery Address |\n| **picking_policy** | selection | Shipping Policy (all at once or by availability) |\n\n---\n\n## \ud83d\udcdd Optional Fields (Commonly Used)\n\n### Customer & Billing\n- **client_order_ref** (char) \u2014 Customer Reference\n- **fiscal_position_id** (many2one) \u2014 Fiscal Position\n- **payment_term_id** (many2one) \u2014 Payment Terms\n- **pricelist_id** (many2one) \u2014 Pricelist\n\n### Dates & Delivery\n- **commitment_date** (datetime) \u2014 Delivery Date promised to customer\n- **validity_date** (date) \u2014 Quotation expiration date\n- **warehouse_id"
+  },
+  {
+    "task": "Set the default value of 'invoice_policy' on product.template to 'delivery' using ir.default.",
+    "category": "model-customize",
+    "reward": 0.8,
+    "tool_calls": [
+      {
+        "tool": "odoo_set_default",
+        "args": {
+          "model": "product.template",
+          "field_name": "invoice_policy",
+          "value": "delivery"
+        },
+        "result_preview": "{\"operation\": \"updated\", \"field\": \"invoice_policy\", \"model\": \"product.template\", \"previous\": \"\\\"delivery\\\"\", \"new_value\": \"\\\"delivery\\\"\"}"
+      }
+    ],
+    "final_response": "\u2705 **Default value set successfully**\n\n| Property | Value |\n|----------|-------|\n| **Model** | product.template |\n| **Field** | invoice_policy |\n| **New default** | delivery |\n| **Operation** | Updated (default already existed) |\n\nThe default value for `invoice_policy` on `product.template` is now set to `'delivery'`. Any new product templates created will use this as the default invoice policy unless explicitly overridden."
+  },
+  {
+    "task": "Set a global default for the 'type' field on res.partner to 'contact' using ir.default.",
+    "category": "model-customize",
+    "reward": 0.8,
+    "tool_calls": [
+      {
+        "tool": "odoo_set_default",
+        "args": {
+          "model": "res.partner",
+          "field_name": "type",
+          "value": "contact"
+        },
+        "result_preview": "{\"operation\": \"updated\", \"field\": \"type\", \"model\": \"res.partner\", \"previous\": \"\\\"contact\\\"\", \"new_value\": \"\\\"contact\\\"\"}"
+      }
+    ],
+    "final_response": "\u2705 **Global default set successfully**\n\n| Property | Value |\n|----------|-------|\n| **Model** | res.partner |\n| **Field** | type |\n| **New default** | contact |\n| **Operation** | Updated (default already existed) |\n\nThe default value for the `type` field on `res.partner` is now set to `'contact'`. Any new partner records created will use this as the default type unless explicitly overridden."
+  },
+  {
+    "task": "Modify the account.move window action to default-filter only posted invoices.",
+    "category": "model-customize",
+    "reward": 0.78,
+    "tool_calls": [
+      {
+        "tool": "odoo_model_info",
+        "args": {
+          "model": "account.move"
+        },
+        "result_preview": "{\"error\": \"Odoo error: Invalid field 'rec_name' on 'ir.model'\"}"
+      },
+      {
+        "tool": "odoo_search_read",
+        "args": {
+          "model": "ir.actions.act_window",
+          "fields": [
+            "id",
+            "name",
+            "res_model",
+            "domain",
+            "context"
+          ],
+          "domain": [
+            [
+              "res_model",
+              "=",
+              "account.move"
+            ]
+          ]
+        },
+        "result_preview": "{\"model\": \"ir.actions.act_window\", \"count\": 13, \"records\": [{\"id\": 263, \"name\": \"Bills\", \"res_model\": \"account.move\", \"domain\": \"[[\\\"state\\\", \\\"=\\\", \\\"posted\\\"], [\\\"move_type\\\", \\\"in\\\", [\\\"in_invoice\\"
+      }
+    ],
+    "final_response": "Perfect! I can see there are 13 window actions for account.move. I notice that most of them already filter for posted invoices (state = 'posted'), but some don't. Let me identify which ones need to be modified:\n\n**Current state:**\n- **Action 260, 261, 262, 263, 264, 267, 273, 337**: Already filter for `state = 'posted'` \u2713\n- **Action 258** (Journal Entries): No domain filter, but has `search_default_posted:1` in context (soft filter)\n- **Action 259**: Filters by active_ids only\n- **Action 265, 296, 581**: Don't have the posted state filter\n\nWhich window action(s) would you like me to modify? Here are the main ones:\n\n1. **Action 258** - \"Journal Entries\" (currently no domain, but has search default)\n2. **Action 259** - \"Journal Entries\" (context-based)\n3. **Action 265** - \"Refunds\" (missing posted filter)\n4. **Action 296, 581** - \"Vendor Bills\" (missing posted filter)\n\nOr would you like me to **update all account.move actions** to ensure they all default-filter for posted invoices? Pleas"
+  },
+  {
+    "task": "Find all Many2one fields on account.move that reference res.partner.",
+    "category": "model-customize",
+    "reward": 0.78,
+    "tool_calls": [
+      {
+        "tool": "odoo_get_fields",
+        "args": {
+          "model": "account.move"
+        },
+        "result_preview": "{\"model\": \"account.move\", \"fields\": {\"id\": {}, \"display_name\": {}, \"campaign_id\": {}, \"source_id\": {}, \"medium_id\": {}, \"sequence_prefix\": {}, \"sequence_number\": {}, \"activity_ids\": {}, \"activity_stat"
+      },
+      {
+        "tool": "odoo_model_info",
+        "args": {
+          "model": "account.move"
+        },
+        "result_preview": "{\"error\": \"Odoo error: Invalid field 'rec_name' on 'ir.model'\"}"
+      },
+      {
+        "tool": "odoo_search_read",
+        "args": {
+          "model": "ir.model.fields",
+          "domain": [
+            [
+              "model_id.model",
+              "=",
+              "account.move"
+            ],
+            [
+              "ttype",
+              "=",
+              "many2one"
+            ],
+            [
+              "relation",
+              "=",
+              "res.partner"
+            ]
+          ],
+          "fields": [
+            "name",
+            "field_description",
+            "relation",
+            "ttype"
+          ]
+        },
+        "result_preview": "{\"model\": \"ir.model.fields\", \"count\": 4, \"records\": [{\"id\": 4624, \"name\": \"bank_partner_id\", \"field_description\": \"Bank Partner\", \"relation\": \"res.partner\", \"ttype\": \"many2one\"}, {\"id\": 4569, \"name\": "
+      }
+    ],
+    "final_response": "Perfect! Here are all the **Many2one fields on account.move that reference res.partner**:\n\n| Field Name | Label | Type | Target Model |\n|------------|-------|------|--------------|\n| **partner_id** | Partner | many2one | res.partner |\n| **commercial_partner_id** | Commercial Entity | many2one | res.partner |\n| **partner_shipping_id** | Delivery Address | many2one | res.partner |\n| **bank_partner_id** | Bank Partner | many2one | res.partner |\n\n**Total: 4 fields**\n\nThese fields are used to link account moves (invoices, bills, journal entries) to partner records for customer/vendor information, shipping addresses, and bank details."
+  },
+  {
+    "task": "List all selection fields on crm.lead and list their possible values. Be thorough and check related data.",
+    "category": "model-customize",
+    "reward": 0.66,
+    "tool_calls": [
+      {
+        "tool": "odoo_model_info",
+        "args": {
+          "model": "crm.lead"
+        },
+        "result_preview": "{\"error\": \"Odoo error: Invalid field 'rec_name' on 'ir.model'\"}"
+      },
+      {
+        "tool": "odoo_get_fields",
+        "args": {
+          "model": "crm.lead"
+        },
+        "result_preview": "{\"error\": \"Odoo error: Object crm.lead doesn't exist\"}"
+      },
+      {
+        "tool": "odoo_list_models",
+        "args": {
+          "keyword": "crm"
+        },
+        "result_preview": "{\"count\": 3, \"models\": [{\"id\": 433, \"model\": \"crm.team\", \"name\": \"Sales Team\"}, {\"id\": 432, \"model\": \"crm.team.member\", \"name\": \"Sales Team Member\"}, {\"id\": 434, \"model\": \"crm.tag\", \"name\": \"CRM Tag\"}"
+      },
+      {
+        "tool": "odoo_list_models",
+        "args": {
+          "keyword": "lead"
+        },
+        "result_preview": "{\"count\": 0, \"models\": []}"
+      },
+      {
+        "tool": "odoo_list_models",
+        "args": {
+          "keyword": "opportunity"
+        },
+        "result_preview": "{\"count\": 0, \"models\": []}"
+      },
+      {
+        "tool": "odoo_list_models",
+        "args": {
+          "keyword": "sale"
+        },
+        "result_preview": "{\"count\": 14, \"models\": [{\"id\": 533, \"model\": \"sale.order\", \"name\": \"Sales Order\"}, {\"id\": 536, \"model\": \"sale.mass.cancel.orders\", \"name\": \"Cancel multiple quotations\"}, {\"id\": 539, \"model\": \"sale.or"
+      }
+    ],
+    "final_response": "**Result:** The `crm.lead` model does not exist in this Odoo instance. \n\nThis Odoo installation appears to be missing the CRM module (which provides `crm.lead` and `crm.opportunity` models). The available CRM-related models are limited to:\n- **crm.team** \u2014 Sales Team\n- **crm.team.member** \u2014 Sales Team Member  \n- **crm.tag** \u2014 CRM Tag\n\n**Possible reasons:**\n1. The CRM module is not installed\n2. This is a minimal Odoo setup without CRM functionality\n3. The instance uses a different model for lead/opportunity management\n\n**Would you like me to:**\n1. Analyze selection fields on one of the available CRM models (crm.team, crm.team.member, crm.tag)?\n2. Check selection fields on **sale.order** instead (which is available)?\n3. Run a health diagnostic to see what modules are installed?\n\nLet me know how you'd like to proceed!"
+  },
+  {
+    "task": "Check what default values are currently set for sale.order fields via ir.default, and show them.",
+    "category": "model-customize",
+    "reward": 0.61,
+    "tool_calls": [
+      {
+        "tool": "odoo_search_read",
+        "args": {
+          "model": "ir.default",
+          "domain": [
+            [
+              "model_id.model",
+              "=",
+              "sale.order"
+            ]
+          ],
+          "fields": [
+            "id",
+            "field_id",
+            "user_id",
+            "company_id",
+            "value"
+          ],
+          "limit": 100
+        },
+        "result_preview": "{\"error\": \"Odoo error: Invalid field ir.default.model_id in condition ('model_id.model', '=', 'sale.order')\"}"
+      },
+      {
+        "tool": "odoo_search_read",
+        "args": {
+          "model": "ir.default",
+          "domain": [
+            [
+              "model",
+              "=",
+              "sale.order"
+            ]
+          ],
+          "fields": [
+            "id",
+            "field_id",
+            "user_id",
+            "company_id",
+            "value"
+          ],
+          "limit": 100
+        },
+        "result_preview": "{\"error\": \"Odoo error: Invalid field ir.default.model in condition ('model', '=', 'sale.order')\"}"
+      },
+      {
+        "tool": "odoo_get_fields",
+        "args": {
+          "model": "ir.default"
+        },
+        "result_preview": "{\"model\": \"ir.default\", \"fields\": {\"id\": {}, \"display_name\": {}, \"field_id\": {}, \"user_id\": {}, \"company_id\": {}, \"condition\": {}, \"json_value\": {}, \"create_uid\": {}, \"create_date\": {}, \"write_uid\": {"
+      },
+      {
+        "tool": "odoo_search_read",
+        "args": {
+          "model": "ir.default",
+          "domain": [
+            [
+              "field_id.model",
+              "=",
+              "sale.order"
+            ]
+          ],
+          "fields": [
+            "id",
+            "field_id",
+            "user_id",
+            "company_id",
+            "json_value"
+          ],
+          "limit": 100
+        },
+        "result_preview": "{\"model\": \"ir.default\", \"count\": 0, \"records\": []}"
+      }
+    ],
+    "final_response": "\u2705 **No default values currently set for sale.order**\n\nThe search returned **0 records**, which means there are currently **no ir.default entries** configured for any fields on the `sale.order` model.\n\nThis means:\n- All sale.order fields will use their model-level defaults (if any are defined in the Python code)\n- No user-specific or company-specific defaults have been set via ir.default\n- Any new defaults you want to set can be added using `odoo_set_default`\n\nWould you like me to:\n1. Check what default values exist for a different model?\n2. Set a new default value for a sale.order field?\n3. Get the full model info for sale.order to see what fields are available?"
+  }
+]

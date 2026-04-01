@@ -50,3 +50,84 @@ Same as Odoo's order syntax:
 - `"name asc"` — ascending by name
 - `"date_order desc, id desc"` — descending by date, then by ID
 - `"partner_id, amount_total desc"` — ascending by partner, descending by amount
+
+
+## Learned from Experience
+
+Add a section on discovering which action to modify and handling multiple actions.
+
+```markdown
+## Finding the Right Action to Modify
+
+A model may have multiple window actions. Use `odoo_model_info` to list them:
+
+```json
+"actions": [
+  {"id": 312, "name": "Quotations", "domain": "[('state','=','draft')]"},
+  {"id": 313, "name": "Sales Orders", "domain": "[]"}
+]
+```
+
+Each action can have its own sort order. **Modify the specific action ID**, not the model:
+
+```
+# Wrong: affects only the first action
+odoo_modify_action(model="sale.order", order="amount_total desc")
+
+# Right: affects the specific action
+odoo_modify_action(action_id=312, order="amount_total desc")
+```
+
+### Verify the change took effect
+
+```
+odoo_model_info(model="sale.order")
+# Check the "actions" array — the modified action should now show your new order
+```
+
+## Limitations
+
+- `default_order` only affects **list views** opened via that action
+- Form views, kanban views, and other view types ignore `default_order`
+- If a user manually sorts the list, their choice overrides `default_order` for that session
+```
+
+---
+
+##
+
+
+## Learned from Experience
+
+Add section on discovering which action to modify and clarify the relationship between multiple actions
+
+```markdown
+## Finding the Right Action to Modify
+
+Use `odoo_model_info(model)` to list all window actions:
+
+```json
+"actions": [
+  {"id": 312, "name": "Quotations", "domain": "[('state','in',['draft','sent'])]"},
+  {"id": 313, "name": "Sales Orders", "domain": "[]"},
+  {"id": 314, "name": "All Orders", "domain": "[]"}
+]
+```
+
+Each action corresponds to a menu item. Modify the specific action ID for the menu you want to change:
+
+```
+# Change sort only for the "Quotations" menu
+odoo_modify_action(action_id=312, order="date_order asc")
+
+# Change sort for the first/default action
+odoo_modify_action(model="sale.order", order="amount_total desc")
+```
+
+## Important: Action-Specific Changes
+
+- Changes via `odoo_modify_action` only affect that specific menu/action
+- The model's `_order` remains unchanged (still visible in `odoo_model_info`)
+- Different menu items can have different sort orders
+- If no action is specified, the first action for the model is modified
+```

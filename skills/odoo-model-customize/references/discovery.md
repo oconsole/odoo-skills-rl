@@ -54,3 +54,68 @@ Returns all field definitions with type, required, readonly, help text. Use this
 - Find the exact field name (not the label)
 - Check field type before setting a default
 - Identify relational field targets
+
+
+## Learned from Experience
+
+Add a Step 4 section with guidance on interpreting `default_order` and when to use `odoo_modify_action`.
+
+```markdown
+## Step 4: Interpret default_order vs _order
+
+The `default_order` field in the response shows the **current runtime sort order** for that action, not the model's `_order`. 
+
+- If `default_order` is `null` or empty: the list uses the model's `_order` (cannot change at runtime)
+- If `default_order` has a value: that action has already been customized; you can override it with `odoo_modify_action(action_id=..., order="...")`
+
+**Always check which action ID you're modifying** — a model may have multiple window actions (e.g., "Quotations" vs "Sales Orders"), each with different sort orders.
+```
+
+---
+
+##
+
+
+## Learned from Experience
+
+Complete the truncated Step 3 section and add guidance on using `odoo_get_fields` for detailed field discovery
+
+```markdown
+## Step 3: Get View Details (when modifying views)
+
+`odoo_get_view(view_id)` returns the XML structure of a specific view. Use this when:
+- You need to find XPath targets for inherited views
+- You want to understand the current field layout
+- You're planning to hide/show fields or reorder them
+
+## Step 4: Get Detailed Field Information
+
+`odoo_get_fields(model)` returns comprehensive field metadata:
+
+```json
+{
+  "partner_id": {
+    "type": "many2one",
+    "relation": "res.partner",
+    "required": true,
+    "readonly": false,
+    "help": "Customer for this order"
+  },
+  "date_order": {
+    "type": "datetime",
+    "required": true,
+    "readonly": false
+  }
+}
+```
+
+Use this to:
+- Confirm field types before setting defaults
+- Find relational targets (many2one, one2many, many2many)
+- Check if a field is already required at model level
+- Understand field dependencies before creating custom fields
+```
+
+---
+
+##

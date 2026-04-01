@@ -100,112 +100,105 @@
       "id": "GS-017",
       "title": "Optimize Query Sequences with Early Termination",
       "principle": "Structure diagnostic queries to fail fast: use search_count to detect zero-result conditions before fetching full records, avoiding unnecessary data transfer.",
-      "application": "When investigating a category of issues (e.g., error logs), first search_count to determine if any records exist. If count is 0, report immediately. If count is high, fetch with limit. This pattern saves round-trips."
+      "application": "When investigating a category of issues (e.g., error logs), first search_count to determine if any records exist. If count is 0, report immediately. If count is high, fetch with limit. This pattern reduces wasted queries."
     },
     {
       "id": "GS-018",
-      "title": "Understand Field Metadata for Customization",
-      "principle": "When customizing models (defaults, views, actions), use odoo_get_fields to understand field properties (required, readonly, selection values) before making changes.",
-      "application": "Always call odoo_get_fields on the target model first. Review field types, constraints, and relationships. This prevents setting invalid defaults or modifying incompatible fields. Essential for ir.default and window action modifications."
+      "title": "Understand Field Metadata for Complete Analysis",
+      "principle": "When analyzing model fields, extract and interpret metadata (required, readonly, selection values, field types) to provide comprehensive guidance on field behavior and constraints.",
+      "application": "Use odoo_get_fields to retrieve field definitions including 'required', 'readonly', 'selection', 'relation', and 'type'. Present this metadata clearly to users so they understand field constraints and dependencies."
     },
     {
       "id": "GS-019",
-      "title": "Use odoo_model_info for Structural Insights",
-      "principle": "When investigating model structure, defaults, or view configurations, odoo_model_info provides a comprehensive overview faster than multiple targeted queries.",
-      "application": "Call odoo_model_info early in model-customization tasks to see default values, field ordering, and related metadata. Use this to inform subsequent odoo_get_fields and odoo_search_read calls. Reduces exploration turns."
+      "title": "Distinguish Between Runtime and Code-Level Customizations",
+      "principle": "When advising on model customizations, clearly differentiate between changes that can be made at runtime (via UI or API) versus those requiring code/module development.",
+      "application": "For attributes like _order, _rec_name, or computed fields: explain that these are defined in Python code and cannot be changed at runtime. For window actions, contexts, and field properties: use odoo_modify_action to make runtime changes. Always clarify the scope of what's possible."
     },
     {
       "id": "GS-020",
-      "title": "Leverage odoo_modify_action for View and Context Customization",
-      "principle": "Window actions control sorting, filtering, grouping, and default context. Use odoo_modify_action to adjust these without code changes, enabling rapid customization.",
-      "application": "For sorting: modify the 'order' key in context. For filtering: add domain constraints. For grouping: set 'group_by' in context. Always verify the action exists and is the correct type (ir.actions.act_window) before modifying."
+      "title": "Enumerate Selection Field Values Comprehensively",
+      "principle": "When asked about selection fields, extract all possible values from field definitions and cross-reference with actual data to ensure completeness and identify unused options.",
+      "application": "Use odoo_get_fields to retrieve the 'selection' attribute for selection fields. Then query the model with search_read to find all distinct values actually present in records. Report both defined and observed values, highlighting any discrepancies."
     }
   ],
   "task_specific_skills": [
     {
       "id": "TS-MC-001",
       "category": "model-customize",
-      "title": "Set Field Defaults via ir.default",
-      "principle": "Use ir.default records to establish global or user-specific default values for model fields without code changes.",
-      "application": "Call odoo_set_default with model name, field name, and value. Verify the field exists and accepts the value type. For selection fields, ensure the value is in the field's selection list. Always confirm the default was set by querying ir.default afterward."
+      "title": "Analyze Model Structure Comprehensively",
+      "principle": "When analyzing a model, gather complete structural information including field definitions, relationships, metadata, and system attributes in a single coherent investigation.",
+      "application": "Use odoo_model_info to get model metadata, odoo_get_fields to extract field definitions with types and constraints, and odoo_search_read to examine actual data. Synthesize findings into a clear picture of model structure and behavior."
     },
     {
       "id": "TS-MC-002",
       "category": "model-customize",
-      "title": "Modify Window Actions for View Customization",
-      "principle": "Window actions (ir.actions.act_window) control how models are displayed: sorting order, default filters, grouping, and context variables. Modify these to customize user experience without touching model code.",
-      "application": "Use odoo_modify_action to update 'order' (sorting), 'domain' (filtering), and 'context' (grouping, defaults). Always fetch the action first to understand its current state. Test modifications by verifying the action's updated fields."
+      "title": "Identify and Filter Related Fields by Type",
+      "principle": "When searching for fields of a specific type (Many2one, One2many, selection, etc.), use field metadata to filter precisely rather than scanning all fields manually.",
+      "application": "Use odoo_get_fields and filter results by 'type' attribute. For Many2one fields, also check the 'relation' attribute to identify target models. Present results in a structured format showing field name, type, and relation."
     },
     {
       "id": "TS-MC-003",
       "category": "model-customize",
-      "title": "Investigate Field Relationships and Dependencies",
-      "principle": "Many2one, One2many, and Many2many fields create relationships between models. Understanding these is critical for customization and data integrity.",
-      "application": "Use odoo_get_fields to identify relationship fields and their target models. For Many2one fields, check the 'relation' property to see which model they reference. Use odoo_search_read to verify related records exist and are in expected states."
+      "title": "Modify Window Actions with Precision",
+      "principle": "When customizing window actions (context, domain, groupby), use odoo_modify_action to make targeted changes without affecting other action properties.",
+      "application": "Use odoo_modify_action to add or update context values, default domains, or groupby settings. Always verify the action exists first with odoo_model_info. Confirm changes with the user before applying."
     },
     {
       "id": "TS-MC-004",
       "category": "model-customize",
-      "title": "Distinguish Between Runtime and Code-Level Customizations",
-      "principle": "Some Odoo features (like _order) are defined in Python code and cannot be changed at runtime. Others (like window action sorting) can be customized via database records.",
-      "application": "When asked to modify a model attribute, first check if it's a database-backed feature (ir.default, ir.actions.act_window, ir.ui.view) or a code-level attribute (_order, _name, _description). For code-level changes, explain that a custom module is required. For database features, use the appropriate tool."
-    },
-    {
-      "id": "TS-MC-005",
-      "category": "model-customize",
-      "title": "Comprehensively Explore Related Customization Data",
-      "principle": "Model customization often involves multiple related records (ir.default, ir.actions.act_window, ir.ui.view). Always check all related areas to provide complete context.",
-      "application": "When investigating a model's customization state, query: (1) odoo_get_fields for field definitions, (2) ir.default for field defaults, (3) ir.actions.act_window for view actions, (4) ir.ui.view for view definitions. Present findings in a unified summary."
+      "title": "Explain Model Attribute Scope and Mutability",
+      "principle": "When users ask about model attributes, clearly explain whether they are code-level (immutable at runtime) or configuration-level (modifiable via UI/API).",
+      "application": "For _order, _rec_name, _description: explain these are Python class attributes defined in module code and require code changes. For window actions, contexts, domains: explain these are database records modifiable via odoo_modify_action. For field properties: explain which are code-level vs. configurable."
     }
   ],
   "common_mistakes": [
     {
       "id": "CM-001",
-      "mistake": "Skipping odoo_get_fields before querying or modifying a model",
-      "consequence": "Attempting to query non-existent fields, setting invalid defaults, or misunderstanding field types and constraints.",
-      "prevention": "Always call odoo_get_fields as the first step when working with an unfamiliar model. Review field types, required status, and selection values before proceeding."
+      "mistake": "Assuming all Odoo models are available on every instance",
+      "consequence": "Queries fail with 'model not found' errors, wasting turns and confusing users.",
+      "prevention": "Always call odoo_list_models or odoo_get_fields first to verify model existence before querying. If a model is missing, identify which module provides it."
     },
     {
       "id": "CM-002",
-      "mistake": "Directly writing state fields instead of using workflow action methods",
-      "consequence": "Bypassing workflow validations, creating inconsistent record states, and triggering errors in dependent processes.",
-      "prevention": "Always use the appropriate action method (action_post, action_confirm, button_validate) instead of directly writing the state field. Verify the action exists on the model before calling it."
+      "mistake": "Writing state fields directly instead of using workflow action methods",
+      "consequence": "Violates Odoo's state machine constraints, causing validation errors or data corruption.",
+      "prevention": "Always use the appropriate action method (action_post, action_confirm, button_validate) instead of directly writing state. Verify the correct method exists via odoo_get_fields."
     },
     {
       "id": "CM-003",
-      "mistake": "Fetching large result sets without limits or pagination",
-      "consequence": "Excessive data transfer, slow queries, and potential timeouts or memory issues.",
-      "prevention": "Always include a limit parameter in search_read calls (50-100 records). Use search_count first to assess result set size. For large datasets, use offset and limit for pagination."
+      "mistake": "Fetching all records without limits when only a count is needed",
+      "consequence": "Wastes bandwidth and API calls; slows down responses unnecessarily.",
+      "prevention": "Use odoo_search_count when you only need to know if records exist or how many match a condition. Reserve odoo_search_read for when you need actual data."
     },
     {
       "id": "CM-004",
-      "mistake": "Not verifying model existence before querying",
-      "consequence": "Errors when querying models from uninstalled modules, wasting turns and confusing users.",
-      "prevention": "Call odoo_list_models or odoo_get_fields to confirm the model exists. If missing, identify the required module and explain installation steps."
+      "mistake": "Constructing overly broad domain filters that match unintended records",
+      "consequence": "Operates on wrong records, causing data corruption or incorrect analysis.",
+      "prevention": "Always include specific filters (state, type, date ranges) in domains. Test domains with search_count first to verify they match the intended scope."
     },
     {
       "id": "CM-005",
-      "mistake": "Ignoring related models and audit trails during investigation",
-      "consequence": "Incomplete analysis, missed root causes, and incorrect recommendations.",
-      "prevention": "Always check related models (ir.default, ir.logging, ir.module.module.dependency) when investigating a specific model. Cross-reference findings across multiple sources."
+      "mistake": "Attempting to modify code-level model attributes (like _order) at runtime",
+      "consequence": "User confusion; wasted effort trying to change immutable attributes.",
+      "prevention": "Distinguish between code-level attributes (require module development) and runtime-configurable properties (use odoo_modify_action). Explain this distinction clearly to users."
     },
     {
       "id": "CM-006",
-      "mistake": "Setting invalid values for selection or Many2one fields",
-      "consequence": "Constraint violations, failed writes, and confusing error messages.",
-      "prevention": "Before setting a default or field value, verify it's valid: for selection fields, check the field's selection list; for Many2one fields, confirm the referenced record exists."
+      "mistake": "Assuming selection field values without checking field definitions",
+      "consequence": "Incomplete or inaccurate reporting of available options.",
+      "prevention": "Always extract selection values from odoo_get_fields output. Cross-reference with actual data via search_read to identify all observed values, including any not in the field definition."
     },
     {
       "id": "CM-007",
-      "mistake": "Modifying window actions without first fetching and understanding the current state",
-      "consequence": "Overwriting existing customizations, losing important filters or sorting, or applying changes to the wrong action.",
-      "prevention": "Always fetch the action with odoo_search_read before modifying it. Review its current 'domain', 'order', and 'context' fields. Merge changes carefully to preserve existing customizations."
+      "mistake": "Processing large result sets in a single query without batching",
+      "consequence": "Timeout errors, memory issues, or incomplete processing.",
+      "prevention": "Always use limit and offset in search_read. For write operations on many records, process in chunks of 10-20 and report progress."
     },
     {
       "id": "CM-008",
-      "mistake": "Assuming all Odoo instances have the same modules installed",
-      "consequence": "Queries fail when models or fields don't exist, wasting turns and requiring recovery.",
-      "prevention": "Always verify model and field availability early. Use odoo_list_models and odoo_get_fields defensively. Explain which modules are required if features are missing."
+      "mistake": "Ignoring related models when investigating a specific model's state",
+      "consequence": "Incomplete diagnosis; missing root causes or hidden issues.",
+      "prevention": "Use multi-angle investigation (GS-008): for cron jobs check ir.logging, for modules check dependencies, for moves check related documents. Cross-validate findings across related models."
     }
   ]
 }
