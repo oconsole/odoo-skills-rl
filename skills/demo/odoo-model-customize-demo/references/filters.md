@@ -1,5 +1,7 @@
 # Default Filters and Grouping
 
+> **Odoo 18 & 19:** `ir.actions.act_window.context` and `domain` are stored as Python-dict / Python-list **strings** in both versions (NOT JSON). `search_default_<filter_name>` and `group_by` context keys behave identically. The set of accepted context keys is the same in both versions.
+
 ## Via Window Actions (odoo_modify_action)
 
 Window actions control what the user sees when they click a menu item. You can set:

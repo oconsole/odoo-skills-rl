@@ -1,5 +1,7 @@
 # Safety Boundary: Runtime-Safe vs Module-Required
 
+> **Verified on Odoo 18.0 and Odoo 19.0.** The runtime-safe and module-required boundaries below apply identically to both versions — no model-customization operations were added or removed between 18 and 19. The only schema additions on `ir.model` in 19 (`abstract`, `fold_name`) are read-only and don't change what you can or can't customize at runtime.
+
 ## Runtime-Safe Operations (via RPC — no module needed)
 
 | What | How | Model |
@@ -48,51 +50,3 @@ User wants to customize something
     ├── Stored computed field? → NEEDS MODULE (suggest x_ + automation)
     └── Add constraint? → NEEDS MODULE (suggest automation for soft check)
 ```
-
-
-## Learned from Experience
-
-Complete the truncated "Module-Required Operations" section and add clarification about when RPC truly cannot work.
-
-```markdown
-## Module-Required Operations (need Python code)
-
-| What | Why it can't be done via RPC |
-|------|------------------------------| 
-| Change `_order` | Python class attribute set at class definition time. Not stored in database—only readable via `default_order` override on actions. |
-| Add computed fields | Requires `@api.depends()` decorator and Python method. Cannot be created via RPC. |
-| Add relational field constraints | Requires `_sql_constraints` or domain logic in Python. |
-| Override model methods | Requires Python inheritance (`_inherit`). |
-| Add field validation logic | Requires `@api.constrains()` or `@api.onchange()` decorators. |
-| Change field `compute` function | Requires Python method definition. |
-
-**Key principle**: If it requires Python decorators, class attributes, or method definitions, it needs a module. Use RPC only for data-layer changes (records, views, actions, rules).
-```
-
----
-
-##
-
-
-## Learned from Experience
-
-Add missing entries to the Module-Required Operations table with specific examples
-
-```markdown
-## Module-Required Operations (need Python code)
-
-| What | Why it can't be done via RPC |
-|------|------------------------------|
-| Change `_order` | Python class attribute set at class definition time. Not stored in database. |
-| Add computed fields | Requires `@api.depends()` decorator and Python method definition. |
-| Add relational fields (one2many, many2many) | Requires reverse relation setup and Python class attributes. |
-| Change field type | Field type is immutable after creation; would require database migration. |
-| Add field constraints | `_sql_constraints` and `@api.constrains()` are Python-only. |
-| Override model methods | Methods like `create()`, `write()`, `unlink()` must be defined in Python. |
-| Add field dependencies | `@api.depends()` decorators cannot be added via RPC. |
-| Change model inheritance | `_inherit` is a class attribute set at module load time. |
-```
-
----
-
-##

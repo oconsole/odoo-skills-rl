@@ -1,5 +1,7 @@
 # Automated Actions (base.automation)
 
+> **Odoo 18 & 19:** `base.automation` and `ir.actions.server` schemas are identical in both versions. Trigger types (`on_create`, `on_write`, `on_create_or_write`, `on_unlink`, `on_time`) are unchanged. `ir.actions.server.state` values (`object_write`, `email`, `followers`, `next_activity`, `code`, `multi`) are the same. The `code` action requires admin in both. Trigger field linkage uses the same `[[6, 0, [...]]]` Many2many command syntax in both.
+
 ## What They Are
 
 Automated actions trigger server actions when records are created, updated, deleted, or based on a time condition. They're stored in `base.automation` and don't require a custom module.

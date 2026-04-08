@@ -1,5 +1,7 @@
 # Creating Custom Fields at Runtime
 
+> **Odoo 18 & 19:** `ir.model.fields` accepts identical create payloads in both versions. The `state="manual"` + `x_` prefix rules are unchanged. Selection field creation via `selection_ids` (a One2many to `ir.model.fields.selection`) works the same in both. The supported `ttype` values are identical.
+
 ## How it Works
 
 Odoo allows creating "manual" fields at runtime by writing to `ir.model.fields`. These fields:

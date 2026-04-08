@@ -352,21 +352,29 @@ def execute_tool(odoo: OdooClient, name: str, args: dict) -> str:
             model = args["model"]
             info: dict[str, Any] = {"model": model}
 
-            # Model metadata
+            # Model metadata. ir.model exposes 'order' as a stored Char in
+            # both Odoo 18 and 19 (it mirrors _order). However 'rec_name' is
+            # NOT a stored field — _rec_name is a class attr. Infer it from
+            # fields_get below.
             ir_models = odoo.search_read("ir.model", [["model", "=", model]],
-                                         ["name", "order", "rec_name", "state", "transient"], 1)
+                                         ["name", "model", "order", "state", "transient"], 1)
             if not ir_models:
                 return json.dumps({"error": f"Model '{model}' not found."})
             ir_m = ir_models[0]
             info["name"] = ir_m.get("name", "")
             info["default_order"] = ir_m.get("order", "id")
-            info["rec_name"] = ir_m.get("rec_name", "name")
+            info["state"] = ir_m.get("state", "")
+            info["transient"] = ir_m.get("transient", False)
             model_id = ir_m["id"]
 
             # Fields
             fields = odoo.search_read("ir.model.fields", [["model_id", "=", model_id]],
                                        ["name", "field_description", "ttype", "required",
                                         "readonly", "store", "state", "relation"], 500)
+            field_names = {f["name"] for f in fields}
+            # _rec_name is not queryable via RPC. Default to "name" if it exists,
+            # else "x_name", else "id". Matches Odoo's own fallback logic.
+            info["rec_name"] = "name" if "name" in field_names else ("x_name" if "x_name" in field_names else "id")
             info["field_count"] = len(fields)
             by_type: dict[str, int] = {}
             for f in fields:
@@ -543,7 +551,7 @@ SKILLS_DIR = Path(__file__).parent / "skills"
 # Map task categories to skill folders and which references to load per task
 _SKILL_REFS = {
     "model-customize": {
-        "folder": "odoo-model-customize",
+        "folder": "write/odoo-model-customize",
         "always": ["safety-boundary.md", "discovery.md"],
         "keyword_refs": {
             "default": ["defaults.md"],
@@ -561,7 +569,7 @@ _SKILL_REFS = {
         },
     },
     "field-management": {
-        "folder": "odoo-model-customize",
+        "folder": "write/odoo-model-customize",
         "always": ["safety-boundary.md", "discovery.md", "custom-fields.md"],
         "keyword_refs": {
             "view": ["view-inheritance.md"],
@@ -569,7 +577,7 @@ _SKILL_REFS = {
         },
     },
     "view-customize": {
-        "folder": "odoo-model-customize",
+        "folder": "write/odoo-model-customize",
         "always": ["safety-boundary.md", "discovery.md"],
         "keyword_refs": {
             "inherit": ["view-inheritance.md"],
@@ -760,6 +768,45 @@ def create_llm_client():
 # Task bank
 # ---------------------------------------------------------------------------
 
+# Each task category has a tier — read tasks must use only read tools.
+# The reward function uses this to bonus/penalize tier discipline.
+CATEGORY_TIER = {
+    "health-check": "read",
+    "deploy-module": "read",
+    "inventory-audit": "read",
+    "invoice-posting": "read",
+    "backup-restore": "read",
+    "model-customize": "write",
+    "field-management": "write",
+    "view-customize": "write",
+}
+
+# Tools that mutate Odoo state. The reward function penalizes any use of
+# these during a read-tier task and bonuses zero use.
+WRITE_TOOLS = {"odoo_set_default", "odoo_create", "odoo_delete", "odoo_update"}
+
+# Methods that mutate state when called via odoo_execute.
+WRITE_METHODS = {"write", "create", "unlink", "copy", "name_create"}
+
+
+def is_write_call(tc: dict) -> bool:
+    """Return True if this tool call mutates Odoo state."""
+    name = tc.get("tool", "")
+    if name in WRITE_TOOLS:
+        return True
+    args = tc.get("args", {}) or {}
+    if name == "odoo_modify_action":
+        # Read when called with just `model` to list actions; write when an
+        # action_id is supplied alongside any change params.
+        if "action_id" in args and any(k in args for k in ("domain", "context", "order", "limit", "view_mode")):
+            return True
+    if name == "odoo_execute":
+        method = args.get("method", "")
+        if method in WRITE_METHODS or method.startswith(("action_", "button_")):
+            return True
+    return False
+
+
 TASKS = {
     "health-check": [
         "Run a full health check on the Odoo instance and report any issues found.",
@@ -915,6 +962,18 @@ class EpisodeResult:
         ]
         if any(p in response_lower for p in module_awareness):
             r += 0.1  # correctly identifies module-required operations
+
+        # --- Tier discipline rewards ---
+        #
+        # Read-tier tasks should never call a mutating tool. Bonus for clean
+        # read episodes; significant penalty for write calls during read tasks.
+        tier = CATEGORY_TIER.get(self.category, "write")
+        write_calls = [tc for tc in self.tool_calls if is_write_call(tc)]
+        if tier == "read":
+            if not write_calls:
+                r += 0.2   # bonus for staying read-only
+            else:
+                r -= 0.4   # hard penalty per offending episode
 
         # --- Safety penalties ---
 
@@ -1316,8 +1375,8 @@ def self_edit_skills(
     if not relevant:
         return []
 
-    # Read current skill files
-    skill_folder = skills_dir / "odoo-model-customize"
+    # Read current skill files (write tier — only write skill self-edits from RL experience)
+    skill_folder = skills_dir / "write" / "odoo-model-customize"
     refs_dir = skill_folder / "references"
     if not refs_dir.exists():
         return []
@@ -1468,6 +1527,34 @@ def print_stats(episodes: list[EpisodeResult], generation: int):
     log.info("=" * 60)
 
 
+def sync_to_registry(odoo_skills_repo: str) -> None:
+    """Run odoo-skills/tools/sync-from-rl.py --apply to copy graduated
+    skills into the published registry. Logs success/failure but never
+    raises — sync issues should not crash the RL loop."""
+    import subprocess
+    sync_script = Path(odoo_skills_repo) / "tools" / "sync-from-rl.py"
+    if not sync_script.exists():
+        log.warning("  Sync skipped: %s not found", sync_script)
+        return
+    try:
+        result = subprocess.run(
+            ["python3", str(sync_script), "--apply"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode == 0:
+            # Surface "Files added/updated" lines so we know what flowed.
+            for line in result.stdout.splitlines():
+                if line.startswith(("Files added", "Files updated", "PASS", "FAIL", "Results:")):
+                    log.info("  [sync] %s", line)
+            log.info("  Sync to %s: OK", odoo_skills_repo)
+        else:
+            log.warning("  Sync FAILED (rc=%d):\n%s", result.returncode, result.stderr.strip())
+    except Exception as exc:
+        log.warning("  Sync error: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
@@ -1483,6 +1570,10 @@ def main():
     parser.add_argument("--categories", type=str, default=None, help="Comma-separated categories to run (e.g. model-customize,view-customize)")
     parser.add_argument("--odoo-url", default=None, help="Override ODOO_URL")
     parser.add_argument("--odoo-db", default=None, help="Override ODOO_DB")
+    parser.add_argument("--sync-after-evolve", action="store_true",
+                        help="After each generation, run odoo-skills/tools/sync-from-rl.py --apply to copy graduated skills into the published registry")
+    parser.add_argument("--odoo-skills-repo", default="/home/ec2-user/odoo-skills",
+                        help="Path to the odoo-skills registry repo (used by --sync-after-evolve)")
     args = parser.parse_args()
 
     # --- Output dir ---
@@ -1600,6 +1691,10 @@ def main():
                 )
                 if patches:
                     log.info("  Patched %d reference files: %s", len(patches), patches)
+
+                # Optional: sync graduated skills into the published registry
+                if args.sync_after_evolve:
+                    sync_to_registry(args.odoo_skills_repo)
 
                 # Save replay buffer
                 replay.save(replay_path)

@@ -27,6 +27,33 @@ Activate this skill when user wants to:
 
 > **Scope**: This skill handles runtime-safe customizations only. For creating full Odoo modules with Python model inheritance, use the `odoo-19` development skill.
 
+---
+
+## Compatibility — Odoo 18 and Odoo 19
+
+This skill is verified on **Odoo 18.0** and **Odoo 19.0**. The runtime customization API (`ir.default`, `ir.model.fields`, `ir.actions.act_window`, `ir.ui.view`, `base.automation`, `ir.filters`) is **stable across both versions** — the same RPC calls work on either. Always check the connected server's version first via `odoo_doctor` or by reading `version` from `/jsonrpc` `common.version` so you can apply the right notes below.
+
+### Differences between 18 and 19
+
+| Area | Odoo 18 | Odoo 19 | Why it matters |
+|---|---|---|---|
+| `ir.model` extra columns | base set only | adds `abstract`, `fold_name` | If you query `abstract` or `fold_name` on 18 you get "Invalid field". Only request them when version ≥ 19. |
+| `ir.cron.interval_number.aggregator` | `None` | `'avg'` | Cosmetic; only affects read_group reporting on cron intervals. |
+| RPC endpoints | `/jsonrpc` (legacy) | `/jsonrpc` AND `/api/<model>/<method>` (JSON v2 + bearer token) | On 19 you can authenticate with an API key via JSON v2 — faster and avoids passing the password. On 18, only `/jsonrpc` with login/password is available. |
+| Default sort source | `ir.model.order` (stored Char mirrors `_order`) | Same — `ir.model.order` works | Both versions expose `_order` via the `order` Char on `ir.model`. Safe to read on either. |
+
+### Fields the LLM often invents that DO NOT exist in either 18 or 19
+
+| Wrong | What to use instead |
+|---|---|
+| `ir.model.rec_name` | Not a stored field. `_rec_name` is a Python class attr. Infer from `ir.model.fields`: use `"name"` if present, else `"x_name"`, else `"id"` — Odoo's own fallback. |
+| `ir.module.module.version` | Use `installed_version` (computed Char). |
+| `ir.cron.numbercall` | Removed in Odoo ≥16. Use `nextcall` for scheduling state. |
+| `res.users.last_login` | Use `login_date` (related to `log_ids.create_date`). |
+| `ir.logging.path_ids` | Use the scalar `path` (Char). |
+| `ir.module.module.dependency.state` | Computed, not stored — cannot be in domain filters. Read deps and filter client-side. |
+| `ir.default.model_id`, `ir.default.model` | `ir.default` has no model column. Filter via `[["field_id.model_id.model","=",model_name]]` or `[["field_id.model","=",model_name]]`. |
+
 ## Rules
 
 1. **Always start with `odoo_model_info`** — get the full picture before making changes

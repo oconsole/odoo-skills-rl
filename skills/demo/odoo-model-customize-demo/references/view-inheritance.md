@@ -1,5 +1,7 @@
 # Modifying Views at Runtime (Inherited Views + XPath)
 
+> **Odoo 18 & 19:** XPath inheritance via `ir.ui.view` records is stable across both versions. Available `position` values (`after`, `before`, `inside`, `replace`, `attributes`) are identical. The one historical wrinkle: in Odoo 17 list views became `<list>` in addition to the legacy `<tree>` tag — both 18 and 19 accept either name in inherited views, but generated XML defaults to `<list>`. When writing XPath, target the tag the parent view actually uses (read it via `odoo_get_view` first).
+
 ## How it Works
 
 Odoo views can be extended by creating **inherited views** — new `ir.ui.view` records that point to a parent view via `inherit_id` and use XPath expressions to insert, replace, or remove elements. This is how Odoo Studio modifies views. No custom module needed.

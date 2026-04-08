@@ -1,5 +1,7 @@
 # Changing List Sort Order
 
+> **Odoo 18 & 19:** the `default_order` mechanism on `ir.actions.act_window` works identically in both versions. `_order` remains a Python class attribute on the model in both — runtime override is via the window action only. Both versions also expose the model's `_order` value as the stored `order` Char on `ir.model`, so you can read it (you just can't write to it meaningfully).
+
 ## The Problem
 
 Odoo's default sort order is defined by the `_order` attribute on the Python model class. For example, `sale.order` has `_order = "date_order desc, id desc"`. **This cannot be changed at runtime via RPC.**

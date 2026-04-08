@@ -1,5 +1,7 @@
 # Saved Filters (ir.filters)
 
+> **Odoo 18 & 19:** the `ir.filters` schema is identical in both versions. `model_id` accepts the technical model name as a string (it's effectively a Char/reference, not a Many2one to `ir.model`). `domain`, `context`, and `sort` are stored as Python-syntax strings — same in both.
+
 ## What They Are
 
 Saved filters appear in the search bar's "Favorites" section. They store a domain filter, optional groupby, and sort order. Users can create them via the UI, or you can create them programmatically.

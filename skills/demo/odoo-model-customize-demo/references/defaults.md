@@ -1,5 +1,7 @@
 # Setting Field Defaults
 
+> **Odoo 18 & 19:** the `ir.default` schema is **identical in both versions** — same columns (`field_id`, `user_id`, `company_id`, `condition`, `json_value`), same `set()` API, same JSON encoding. `ir.default` has **no `model_id` or `model` column** in either version, so to filter defaults by model you must traverse the `field_id` Many2one: `[["field_id.model_id.model","=",model_name]]` or the shorter `[["field_id.model","=",model_name]]` (the latter works because `ir.model.fields.model` is a stored Char in both versions).
+
 ## Using odoo_set_default
 
 The safest and simplest way to set defaults. Handles JSON encoding and field lookup automatically.

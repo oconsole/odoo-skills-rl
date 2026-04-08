@@ -55,6 +55,28 @@ Returns all field definitions with type, required, readonly, help text. Use this
 - Check field type before setting a default
 - Identify relational field targets
 
+## Odoo 18 / 19 Notes for Discovery
+
+| Item | Odoo 18 | Odoo 19 |
+|---|---|---|
+| `ir.model.order` (stored mirror of `_order`) | Available — safe to read | Available — safe to read |
+| `ir.model.rec_name` | **Does not exist** — never request it | **Does not exist** — never request it |
+| `ir.model.abstract` | Does not exist — querying it errors | Available |
+| `ir.model.fold_name` | Does not exist — querying it errors | Available |
+
+**Safe `ir.model` query that works on BOTH versions:**
+
+```python
+odoo_search_read(
+    model="ir.model",
+    domain=[["model", "=", target_model]],
+    fields=["name", "model", "order", "state", "transient"],
+    limit=1,
+)
+```
+
+**To get `_rec_name`** (since it isn't stored anywhere queryable), inspect `ir.model.fields` for the model and pick `"name"` if it exists, otherwise `"x_name"`, otherwise `"id"`. This is exactly what Odoo itself does.
+
 
 ## Learned from Experience
 
