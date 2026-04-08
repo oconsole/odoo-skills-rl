@@ -779,6 +779,10 @@ CATEGORY_TIER = {
     "model-customize": "write",
     "field-management": "write",
     "view-customize": "write",
+    # Grey-area judgment tasks: span multiple modules, require interpretation,
+    # mix discovery with mutation. Tier=write because the dominant intent is
+    # to produce MOs / records, but the agent is expected to discover first.
+    "cross-module-judgment": "write",
 }
 
 # Tools that mutate Odoo state. The reward function penalizes any use of
@@ -889,6 +893,31 @@ TASKS = {
         # Discovery
         "Show the rendered form view for res.partner and list all fields visible in it.",
         "List all inherited views for the sale.order form view, showing their priority and module origin.",
+    ],
+    "cross-module-judgment": [
+        # Ambiguous prompts that require the agent to interpret intent,
+        # discover what's available, and make judgment calls. Span multiple
+        # Odoo modules. Some tasks are designed to fail gracefully when
+        # required modules are missing — that's part of the learning.
+        #
+        # CRM-style fallback (crm module not installed on this instance —
+        # the agent must detect that and either fall back to sale.order
+        # pipeline data or explain the limitation).
+        "Give me our most likely leads to convert into sales this quarter. Use whatever data you have available — if a CRM module isn't installed, fall back to sale order pipeline signals.",
+        "Find our top 5 prospects by likely deal value. Explain what 'likely' means based on the data available on this instance.",
+        # Manufacturing + project + product knowledge
+        "Create a manufacturing order that transforms products related to project X into a single combined product. Pick a project that actually has linked products. Choose a sensible target product. Explain your reasoning.",
+        "Make three new manufacturing orders that ensure our recently produced items are sufficiently polished and burred for sale. Find the recent MOs first, then plan the finishing work.",
+        "I need to fulfill all draft sale orders for the next 7 days. Build a manufacturing plan: which MOs are needed, in what quantity, and flag any component shortages.",
+        # Inventory + sales judgment
+        "Identify our slowest-moving products and propose which ones to mark down. Use stock movement data, not just current quantities. Justify each pick.",
+        "Which sale orders are at risk of late delivery based on current stock levels? Cross-reference sale.order.line with stock availability.",
+        # Multi-step finishing pipeline
+        "We just finished a batch of raw furniture parts. Create the finishing MOs (sand, stain, polish) so they're ready to ship. Find the recent finished components first, then plan the right number of follow-up MOs based on what you find.",
+        # Project + procurement
+        "Project X needs materials we don't have in stock. Find what's missing across all open project tasks, then create the right purchase orders or manufacturing orders to fill the gap.",
+        # Judgment with no clear right answer
+        "Suggest which open quotations are most likely to close this month. Rank them and explain your scoring method.",
     ],
 }
 
