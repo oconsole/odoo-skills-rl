@@ -57,3 +57,63 @@ The tool:
 - **Selection values**: Must match the technical key, not the label (e.g., `"delivery"` not `"Based on Delivered Quantity"`)
 - **Many2one**: Pass the integer ID, not a name string
 - **Existing default**: The tool handles update vs create automatically — no need to delete first
+
+
+## Learned from Experience
+
+Add section on reading current defaults before modification
+
+**Location:** After "## Using odoo_set_default" header, before "### Set a global default"
+
+**Add:**
+```markdown
+### Check current defaults first
+
+Always inspect existing defaults before setting new ones:
+
+```
+odoo_model_info(model="sale.order")
+// Returns "defaults": [{"field": "warehouse_id", "value": "2"}]
+
+odoo_search_read("ir.default", 
+  [["field_id.model", "=", "sale.order"]], 
+  ["field_id.name", "json_value", "user_id", "company_id"])
+```
+
+This prevents accidentally overwriting user-specific or company-specific defaults with global ones.
+```
+
+**Rationale:** Agent episodes show successful default queries using `odoo_search_read` on `ir.default` with field traversal (`field_id.model`). The current documentation jumps straight to setting without mentioning discovery, which can lead to unintended overwrites.
+
+---
+
+##
+
+
+## Learned from Experience
+
+Add explicit note about field type constraints for defaults
+
+**Location:** After "## How it Works Internally" section
+
+**Add:**
+```markdown
+
+## Field Type Constraints
+
+Not all field types support defaults via `ir.default`:
+- **Supported:** char, text, integer, float, boolean, selection, date, datetime, many2one, many2many (as list of IDs)
+- **Not supported:** One2many, computed fields, binary fields
+- **Relational fields:** Pass the database ID (integer) as the value, not a record object
+
+Example:
+```
+# ✓ Correct: many2one default uses ID
+odoo_set_default(model="sale.order", field_name="warehouse_id", value=2)
+
+# ✗ Wrong: passing a record object
+odoo_set_default(model="sale.order", field_name="warehouse_id", value={"id": 2})
+```
+```
+
+**Rationale:** Prevents type-mismatch errors when setting defaults on relational fields, which was an implicit failure mode in the episodes.

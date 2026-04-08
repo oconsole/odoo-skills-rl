@@ -76,3 +76,74 @@ odoo_search_read(
 ```
 
 **To get `_rec_name`** (since it isn't stored anywhere queryable), inspect `ir.model.fields` for the model and pick `"name"` if it exists, otherwise `"x_name"`, otherwise `"id"`. This is exactly what Odoo itself does.
+
+
+## Learned from Experience
+
+Add Step 3.5 for action discovery before modification
+
+**Location:** After "Step 3: Get View Details" section header (currently incomplete)
+
+**Add:**
+```markdown
+## Step 3.5: Get Action Details (when modifying sort/filter/context)
+
+Before calling `odoo_modify_action()`, always retrieve the action ID:
+
+```json
+odoo_model_info(model)  // Returns "actions" array with IDs
+```
+
+Use the returned `actions[].id` to target the specific menu entry. If multiple actions exist for the same model, verify you're modifying the correct one by checking the `name` field (e.g., "Quotations" vs "All Sales Orders").
+
+**Example:**
+```
+// From odoo_model_info("sale.order"), you get:
+// "actions": [{"id": 312, "name": "Quotations", ...}, {"id": 313, "name": "All Orders", ...}]
+
+// Modify only the "Quotations" action:
+odoo_modify_action(action_id=312, order="date_order desc")
+```
+```
+
+**Rationale:** Agent episodes show that `odoo_modify_action(model=...)` without an action_id can be ambiguous when multiple actions exist. Explicit action_id targeting is safer and more predictable.
+
+---
+
+##
+
+
+## Learned from Experience
+
+Expand Step 3 with view-specific discovery guidance
+
+**Location:** After "## Step 3: Get View Details (when modifying views)" (currently incomplete)
+
+**Replace incomplete section with:**
+```markdown
+## Step 3: Get View Details (when modifying views)
+
+`odoo_get_view(view_id)` returns the full XML definition. **Always call this before creating an inherited view.**
+
+```json
+{
+  "id": 944,
+  "name": "sale.order.form",
+  "type": "form",
+  "priority": 16,
+  "arch": "<form>...</form>",
+  "fields": {
+    "name": {"type": "char", "string": "Order Reference"},
+    "partner_id": {"type": "many2one", "relation": "res.partner"}
+  }
+}
+```
+
+**Critical:** Tree views expose only a subset of model fields. Check the `fields` dict in the response — if a field is not listed, it **cannot be added to that tree view** even via inheritance. Use `odoo_model_info()` to see all fields, then cross-reference with `odoo_get_view()` to see which are available in the specific view type.
+```
+
+**Rationale:** The tree view failure shows agents didn't understand that view-level field availability differs from model-level availability. This bridges that gap with concrete discovery steps.
+
+---
+
+##

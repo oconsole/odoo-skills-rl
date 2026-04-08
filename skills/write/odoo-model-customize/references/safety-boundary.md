@@ -50,3 +50,40 @@ User wants to customize something
     ├── Stored computed field? → NEEDS MODULE (suggest x_ + automation)
     └── Add constraint? → NEEDS MODULE (suggest automation for soft check)
 ```
+
+
+## Learned from Experience
+
+Add clarification about view inheritance and XPath specificity
+
+**Location:** After the "Add field to form/tree view" row
+
+**Add:**
+```markdown
+| Modify field attributes in views | Inherited view with XPath `@attributes` | ir.ui.view |
+| Change field widget type | Inherited view with `widget="..."` attribute | ir.ui.view |
+```
+
+**Rationale:** Agent episodes show frequent use of `odoo_modify_action` for view changes, but the current table only mentions "Add field" and "Hide/show". Agents need to know that widget changes and attribute modifications are also view-safe operations.
+
+---
+
+##
+
+
+## Learned from Experience
+
+Add clarification about view inheritance limitations and tree view specifics
+
+**Location:** After the "Add field to form/tree view" row in the Runtime-Safe Operations table
+
+**Add:**
+```markdown
+| Add field to tree view | Create inherited ir.ui.view with XPath (tree views have limited field support) | ir.ui.view |
+```
+
+**Rationale:** The failure log shows agents attempting tree view customization without understanding that tree views have stricter field availability than form views. This clarifies the operation is possible but constrained.
+
+---
+
+##

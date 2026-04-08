@@ -70,7 +70,7 @@
       "id": "GS-012",
       "title": "Leverage search_count for Efficiency",
       "principle": "When you only need to know the quantity of records matching a condition, use search_count instead of search_read to reduce data transfer and improve performance.",
-      "application": "Use odoo_search_count to get record counts before deciding whether to fetch full details. Useful for reporting metrics, detecting anomalies (e.g., 'are there any negative stock records?'), and validating data quality thresholds."
+      "application": "Use odoo_search_count to get record counts before deciding whether to fetch full details. Useful for reporting metrics, detecting anomalies (e.g., 'are there any negative stock records?'), and validating data thresholds."
     },
     {
       "id": "GS-013",
@@ -104,58 +104,115 @@
     },
     {
       "id": "GS-018",
-      "title": "Use ir.default for System-Wide Configuration",
-      "principle": "ir.default is the canonical Odoo mechanism for setting default field values across models. It persists defaults at the system level and respects user/company context.",
-      "application": "When setting defaults on model fields (e.g., invoice_policy on product.template), use odoo_set_default with the model name, field name, and value. Always verify existing defaults first with odoo_search_read on ir.default to avoid conflicts."
+      "title": "Use odoo_model_info for Configuration Discovery",
+      "principle": "When working with system configuration (defaults, settings, field properties), use odoo_model_info to understand model structure before querying or modifying records.",
+      "application": "Call odoo_model_info on models like ir.default, ir.ui.view, ir.actions.act_window to understand their schema. This reveals available fields and relationships needed for targeted queries or modifications."
     },
     {
       "id": "GS-019",
-      "title": "Combine Model Info with Field-Level Defaults",
-      "principle": "When auditing or configuring defaults, use odoo_model_info to understand field definitions and constraints, then cross-reference with ir.default records to ensure consistency.",
-      "application": "Query odoo_model_info to see field types, required status, and selection values. Then query ir.default to see what defaults are actually set. Report any mismatches (e.g., default value not in selection list) as data quality issues."
+      "title": "Leverage odoo_execute for Computed Insights",
+      "principle": "When standard search/read queries cannot answer a question (e.g., filestore size estimation, complex aggregations), use odoo_execute to run custom logic or SQL.",
+      "application": "Use odoo_execute for: calculating totals across related records, estimating storage from attachment metadata, running database-level aggregations, or executing custom methods. Always validate results with follow-up queries."
+    },
+    {
+      "id": "GS-020",
+      "title": "Combine Multiple Count Queries for Comprehensive Metrics",
+      "principle": "When assessing system state (e.g., data volume, pending operations), run multiple search_count queries in sequence to build a complete picture without fetching full records.",
+      "application": "For backup planning: count partners, invoices, orders, pickings, attachments in one turn. For module health: count installed modules, pending upgrades, broken dependencies. Present as a summary table with all metrics."
     }
   ],
   "task_specific_skills": [
     {
-      "id": "TS-01-001",
-      "category": "model-customize",
-      "title": "Set Model Field Defaults via ir.default",
-      "principle": "Use ir.default to persistently set default values for model fields. This is the standard Odoo mechanism and respects user/company context.",
-      "application": "Use odoo_set_default(model_name, field_name, value) to set defaults. Always verify the field exists and the value is valid for the field type. For selection fields, ensure the value is in the allowed list. Confirm the operation with the user before applying."
+      "id": "TS-BR-001",
+      "category": "backup-restore",
+      "title": "Estimate Backup Size via Attachment Analysis",
+      "principle": "To estimate database and filestore size for backup planning, analyze ir.attachment records comprehensively, including file sizes, types, and related data.",
+      "application": "Query ir.attachment with search_count to get total count. Use search_read to fetch records with file_size, type, and create_date fields. Cross-reference with ir.model to understand which models store attachments. Use odoo_execute to sum file sizes if needed. Report total attachment count, total size, and breakdown by model."
     },
     {
-      "id": "TS-01-002",
-      "category": "model-customize",
-      "title": "Audit Existing Defaults Before Modification",
-      "principle": "Before setting or modifying defaults, query ir.default to see what defaults are already configured. This prevents accidental overwrites and reveals conflicting configurations.",
-      "application": "Use odoo_search_read on ir.default with domain [('model', '=', model_name)] to list all existing defaults. Display results grouped by field. If a default already exists for the target field, ask the user whether to overwrite it."
+      "id": "TS-BR-002",
+      "category": "backup-restore",
+      "title": "Verify Pre-Restore System State",
+      "principle": "Before a restore operation, verify the database is in a safe state by checking for pending module operations, scheduled jobs, and active sessions.",
+      "application": "Check ir.module.module for state != 'installed' (pending upgrades). Query ir.cron for active jobs that might interfere. Search ir.logging for recent errors. Verify no users are currently logged in via ir.session.session. Report any blockers or warnings."
     },
     {
-      "id": "TS-01-003",
+      "id": "TS-BR-003",
+      "category": "backup-restore",
+      "title": "Gather Core Data Metrics for Backup Documentation",
+      "principle": "Collect key record counts and system metadata to document the backup state and aid in restore validation.",
+      "application": "Use search_count on core models: res.partner, account.move, sale.order, stock.picking, ir.attachment. Query odoo_doctor for version and database name. Combine results into a summary report with timestamp. This serves as a baseline for post-restore verification."
+    },
+    {
+      "id": "TS-MC-001",
       "category": "model-customize",
-      "title": "Validate Field Definitions Before Setting Defaults",
-      "principle": "Always use odoo_model_info to confirm the field exists, understand its type, and check constraints before setting a default value.",
-      "application": "Query odoo_model_info(model_name) and inspect the target field's definition. For selection fields, verify the default value is in the selection list. For required fields, ensure the default is non-empty. For relational fields, verify the referenced record exists."
+      "title": "Set Global Defaults via ir.default",
+      "principle": "Use ir.default model to set field-level defaults that apply globally across the system, avoiding hardcoding defaults in code.",
+      "application": "Query ir.default with search_read to see existing defaults. To set a new default: create a record with fields_id (field reference), model_id (target model), and user_id (empty for global). Use odoo_model_info to find the correct field ID. Verify with follow-up search_read."
+    },
+    {
+      "id": "TS-MC-002",
+      "category": "model-customize",
+      "title": "Modify List View Sort Order via Window Actions",
+      "principle": "Customize list view display order by modifying ir.actions.act_window context to set default sort fields without editing XML.",
+      "application": "Use odoo_modify_action to update the context of a window action. Set context['sort'] to field name and direction (e.g., 'date_order desc'). Verify the change by querying the action's context field. Test in the UI to confirm sort order applies."
+    },
+    {
+      "id": "TS-MC-003",
+      "category": "model-customize",
+      "title": "Discover and Validate Field Defaults Before Modification",
+      "principle": "Before setting defaults, use odoo_get_fields and odoo_model_info to understand field types, constraints, and existing defaults.",
+      "application": "Call odoo_get_fields on the target model to list all fields. For each field of interest, check its type (selection, many2one, etc.) and required status. Query ir.default to see if a default already exists. This prevents setting invalid defaults."
     }
   ],
   "common_mistakes": [
     {
       "id": "CM-001",
-      "mistake": "Skipping field validation before setting defaults",
-      "description": "Attempting to set a default value without first checking if the field exists, what type it is, or what constraints apply. This causes silent failures or invalid defaults.",
-      "prevention": "Always call odoo_model_info first to inspect the field definition. Verify the value matches the field type and any selection constraints."
+      "mistake": "Querying large result sets without limits",
+      "consequence": "Slow responses, high memory usage, potential timeouts. User experience degradation.",
+      "prevention": "Always include limit parameter in search_read (50-100 records). Use search_count first to assess result size. For large datasets, use offset and pagination."
     },
     {
       "id": "CM-002",
-      "mistake": "Overwriting existing defaults without user confirmation",
-      "description": "Setting a new default value without checking if one already exists, potentially breaking existing workflows or user expectations.",
-      "prevention": "Query ir.default before setting any default. If a default already exists, show the user the current value and ask for explicit confirmation before overwriting."
+      "mistake": "Modifying state fields directly instead of using workflow actions",
+      "consequence": "Bypasses validation, triggers, and state machine logic. Data inconsistency and broken workflows.",
+      "prevention": "Always use action methods (action_post, action_confirm, button_validate). Never write state directly. Check GS-006 for correct patterns."
     },
     {
       "id": "CM-003",
-      "mistake": "Not cross-referencing related models when investigating configuration",
-      "description": "Checking only the primary model (e.g., ir.default) without examining related models (e.g., ir.model, ir.model.fields) that provide context and validation.",
-      "prevention": "When auditing or configuring model behavior, always query both the configuration model (ir.default) and the metadata models (ir.model.info, ir.model.fields) to get a complete picture."
+      "mistake": "Assuming all Odoo models exist on every instance",
+      "consequence": "RPC errors when querying unavailable models. Wasted turns debugging non-existent models.",
+      "prevention": "Use odoo_list_models or odoo_get_fields to verify model existence before querying. Explain which module is needed if model is missing."
+    },
+    {
+      "id": "CM-004",
+      "mistake": "Fetching full records when only counts are needed",
+      "consequence": "Unnecessary data transfer, slower responses, higher API load.",
+      "prevention": "Use search_count for metric queries. Reserve search_read for when record details are actually needed. Apply GS-012 and GS-013."
+    },
+    {
+      "id": "CM-005",
+      "mistake": "Investigating issues from a single angle without cross-referencing related models",
+      "consequence": "Incomplete analysis, missed root causes, incorrect recommendations.",
+      "prevention": "Always check related models (e.g., ir.logging for cron execution, ir.module.module.dependency for module issues). Apply GS-008 and GS-014."
+    },
+    {
+      "id": "CM-006",
+      "mistake": "Ignoring field types and constraints when setting defaults or modifying records",
+      "consequence": "Invalid data, constraint violations, silent failures or cryptic errors.",
+      "prevention": "Use odoo_get_fields and odoo_model_info to understand field types before modification. Validate field values match expected types (selection options, many2one IDs, etc.)."
+    },
+    {
+      "id": "CM-007",
+      "mistake": "Not confirming user intent before destructive operations",
+      "consequence": "Accidental data loss, user frustration, potential compliance issues.",
+      "prevention": "Always ask for explicit confirmation before delete/write operations on production data. Show what will be affected. Apply GS-001."
+    },
+    {
+      "id": "CM-008",
+      "mistake": "Using vague or overly broad domain filters",
+      "consequence": "Queries return wrong records, leading to incorrect analysis or unintended modifications.",
+      "prevention": "Include specific filters (state, type, date ranges). Prefer exact matches. Test domains with search_count first. Apply GS-002."
     }
   ]
 }

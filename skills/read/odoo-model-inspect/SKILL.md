@@ -170,3 +170,33 @@ When you've finished an inspection, present results in the format that matches t
 - **Comparison** → side-by-side table
 
 Highlight anything surprising — broken references, unusual states, mismatches between related models.
+
+---
+
+## Common Pitfalls (auto-curated by RL)
+
+_Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescriptive rule learned from a real failed episode._
+
+<!-- AUTO-CURATED-START -->
+- NEVER use `numbercall` on `ir.cron`; use `nextcall` and `state` to identify stuck scheduled actions instead.
+- ALWAYS use `installed_version` on `ir.module.module`; NEVER use `version` (Invalid field).
+- WHEN querying date ranges on `ir.logging`, use `fields.Datetime.now()` in Python context, not `now()` in domain expressions.
+- NEVER filter on `ir.module.module.dependency.state`; it is not stored and cannot be queried directly.
+- WHEN checking module dependencies, query `ir.module.module.dependency` separately, not as a nested field filter.
+- NEVER pass list values directly in domain filters; wrap multi-value conditions in proper OR/AND tuples.
+- NEVER filter on `ir.module.module.category` or `installable`; use `state` field instead to identify uninstalled modules.
+- NEVER pass bare list values in domain filters on `ir.module.module`; wrap conditions in proper tuple syntax like `[('state', 'in', ['uninstalled'])]`.
+- ON `stock.move`, use `quantity` not `quantity_done`; `quantity_done` is invalid for filtering.
+- NEVER query `product.product.qty_available` in domain filters; it is computed and not stored—fetch product IDs first, then read the field.
+- ON `account.payment`, use `date` not `payment_date` to filter by payment timing.
+- ON `account.move`, the field is `move_type` not `type`; use `move_type` in domain filters for invoice classification.
+- NEVER use `%(date_minus_7_days)s` syntax in domain filters; calculate dates in Python and pass literal ISO strings like `'2024-01-15'`.
+- WHEN filtering `account.move` by date range, compute the target date in Python first, then pass it as a string in the domain.
+- ON `ir.cron`, use `nextcall` and `state` to identify stuck actions; NEVER use `last_call` (Invalid field).
+- NEVER filter on `installable` field on `ir.module.module`; use `state` field to identify uninstalled modules.
+- NEVER use `now()` in domain filters on `stock.move`; calculate the current datetime in Python first.
+- NEVER read `name` field on `stock.move` for identification; use `id` or `reference` field instead.
+- NEVER use `%(date_start)s` or similar placeholders in domain filters; calculate dates in Python and pass literal ISO strings.
+- NEVER use `now()` in domain filter expressions; calculate the current datetime in Python first, then pass as ISO string.
+- NEVER filter on `ir.module.module.dependency.state`; query `ir.module.module.dependency` separately with its own search.
+<!-- AUTO-CURATED-END -->

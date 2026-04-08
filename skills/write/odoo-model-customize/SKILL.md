@@ -114,3 +114,26 @@ These operations **cannot** be done at runtime. If the user asks for them, expla
 | `odoo_search_read` | Query any Odoo model |
 | `odoo_create` | Create records (ir.model.fields, ir.ui.view, ir.filters, base.automation) |
 | `odoo_get_fields` | Get field definitions for a model |
+
+---
+
+## Common Pitfalls (auto-curated by RL)
+
+_Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescriptive rule learned from a real failed episode._
+
+<!-- AUTO-CURATED-START -->
+- ON `ir.default`, the value column is `json_value` (JSON-encoded); there is no `value` or `default_value` field. Prefer the `odoo_set_default` helper over raw writes.
+- BEFORE querying `crm.lead`, verify CRM module is installed via `odoo_list_models(keyword='crm')`.
+- ON `ir.model.fields`, the column is `field_description` not `label`; verify other column names via `odoo_get_fields(model='ir.model.fields')`.
+- BEFORE querying `mrp.production`, verify the Manufacturing module is installed via `odoo_list_models(keyword='mrp')`.
+- ON `mrp.production`, do not pass `name` to `create()` — it is auto-generated; verify required fields via `odoo_get_fields(model='mrp.production')` first.
+- NEVER assume `probability` exists on `sale.order` — that field belongs to `crm.lead`. If CRM is uninstalled, score prospects via `amount_total` and `state` instead.
+- NEVER assume `product_id` exists on `project.project` — projects do not link directly to products. Use `project.task` or `mrp.production` for product relationships.
+- NEVER use `+` syntax in date domains; use `fields.Date.today()` + `timedelta()` to compute cutoff dates before querying.
+- ON `sale.order.line`, the field is `product_uom_qty` not `product_uom`; verify via `odoo_get_fields(model='sale.order.line')`.
+- ALWAYS pass domain as a list of lists `[[...]]` not a string; malformed domains cause "invalid argument type" errors.
+- ON `mrp.production`, the field is `date_start` not `date_planned_start`; verify required/available fields via `odoo_get_fields()` first.
+- ON `mrp.bom`, the field is `product_id` not `name`; use `product_id.name` to access the BOM's product name.
+- ON `project.project`, there is no `state` field; use `project.task.state` instead for task-level status tracking.
+- ON `purchase.order`, there is no `warehouse_id` field; warehouse context comes from `stock.warehouse` or purchase line locations.
+<!-- AUTO-CURATED-END -->

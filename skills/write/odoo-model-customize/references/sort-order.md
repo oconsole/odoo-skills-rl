@@ -52,3 +52,65 @@ Same as Odoo's order syntax:
 - `"name asc"` — ascending by name
 - `"date_order desc, id desc"` — descending by date, then by ID
 - `"partner_id, amount_total desc"` — ascending by partner, descending by amount
+
+
+## Learned from Experience
+
+Complete the truncated example and add multi-field sort guidance
+
+**Location:** After "# Change sort" (line appears cut off)
+
+**Replace incomplete section with:**
+```markdown
+### Using odoo_modify_action
+
+```
+# List all window actions for a model
+odoo_model_info(model="sale.order")
+
+# Change the sort order on a specific action
+odoo_modify_action(action_id=312, order="date_order desc")
+
+# Multi-field sort (evaluated left-to-right)
+odoo_modify_action(action_id=312, order="state asc, date_order desc, id desc")
+```
+
+### Important: Field Names in `order`
+
+- Use the **database field name** (e.g., `date_order`, not "Date Order")
+- For related fields, use dot notation: `partner_id.name asc`
+- Direction is optional; defaults to `asc` if omitted
+- Separate multiple fields with commas and spaces
+```
+
+**Rationale:** Agent episodes show successful multi-field sorts (e.g., "state asc, date_order desc") but the current documentation cuts off mid-example. Agents need explicit guidance on field name syntax and related field sorting.
+
+---
+
+##
+
+
+## Learned from Experience
+
+Add warning about tree view sort order limitations
+
+**Location:** After "## The Solution: Window Action `default_order`" heading, before the code example
+
+**Add:**
+```markdown
+
+### Important: Tree View Sort Limitations
+
+Tree views in Odoo have stricter sort field requirements than form views. A field must be:
+- Present in the tree view's `<field>` elements
+- Not a computed/non-stored field
+- Not a One2many or Many2many relation
+
+If `odoo_modify_action(order="field_name asc")` fails silently on a tree view action, verify the field exists in the tree view XML via `odoo_get_view(view_id)` before troubleshooting further.
+```
+
+**Rationale:** Prevents agents from debugging sort order issues on tree views without first checking field availability in the view definition.
+
+---
+
+##

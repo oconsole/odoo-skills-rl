@@ -1379,9 +1379,364 @@ Keep it under 300 words.
 
 
 # ---------------------------------------------------------------------------
-# 3. Self-Editing Skills — agent proposes patches to SKILL.md references
+# 3. Self-Editing Skills — surgical, tier-aware updates to SKILL.md
 #    (SICA, Robeyns et al. 2025: 17-53% improvement)
+#
+# Each tier's top-level SKILL.md has a marker-bounded section that the
+# self-editor manages exclusively:
+#
+#     ## Common Pitfalls (auto-curated by RL)
+#     <!-- AUTO-CURATED-START -->
+#     - ALWAYS use `installed_version`, NEVER `version` on `ir.module.module`.
+#     - ...
+#     <!-- AUTO-CURATED-END -->
+#
+# Every generation: read existing bullets, ask LLM for new prescriptive
+# bullets based on this generation's failures, dedupe, rewrite the
+# bounded region in place. Hand-authored content outside the markers
+# is never touched. Demo-tier skills are never auto-edited.
 # ---------------------------------------------------------------------------
+
+AUTO_START = "<!-- AUTO-CURATED-START -->"
+AUTO_END = "<!-- AUTO-CURATED-END -->"
+AUTO_HEADING = "## Common Pitfalls (auto-curated by RL)"
+MAX_BULLETS = 30
+
+# Tier → top-level SKILL.md path. Demo is intentionally absent — hand-crafted.
+TIER_SKILL_FILES = {
+    "read": ("read", "odoo-model-inspect"),
+    "write": ("write", "odoo-model-customize"),
+}
+
+
+def _extract_failures(episodes: list['EpisodeResult']) -> list[dict]:
+    """Pull tool calls that returned errors plus the user task for context."""
+    out = []
+    for e in episodes:
+        for tc in e.tool_calls:
+            preview = tc.get("result_preview", "")
+            if '"error"' not in preview:
+                continue
+            # Strip the error string out of the preview JSON
+            m = re.search(r'"error"\s*:\s*"([^"]+)"', preview)
+            err = m.group(1) if m else preview[:200]
+            args = tc.get("args", {}) or {}
+            out.append({
+                "task": e.task[:120],
+                "tool": tc.get("tool", ""),
+                "args": json.dumps(args)[:200],
+                "error": err[:250],
+                "category": e.category,
+            })
+    return out
+
+
+def _read_auto_section(path: Path) -> tuple[str, list[str]]:
+    """Return (full file content, list of existing bullet strings)."""
+    content = path.read_text(encoding="utf-8")
+    if AUTO_START not in content or AUTO_END not in content:
+        return content, []
+    start = content.index(AUTO_START) + len(AUTO_START)
+    end = content.index(AUTO_END)
+    section = content[start:end]
+    bullets = []
+    for line in section.splitlines():
+        line = line.strip()
+        if line.startswith("- "):
+            bullets.append(line[2:].strip())
+    return content, bullets
+
+
+def _write_auto_section(path: Path, content: str, bullets: list[str]) -> None:
+    """Replace (or insert) the auto-curated region with the given bullets."""
+    body = "\n".join(f"- {b}" for b in bullets) if bullets else "- (no pitfalls learned yet)"
+    region = f"{AUTO_START}\n{body}\n{AUTO_END}"
+
+    if AUTO_START in content and AUTO_END in content:
+        before = content[:content.index(AUTO_START)]
+        after = content[content.index(AUTO_END) + len(AUTO_END):]
+        new_content = before + region + after
+    else:
+        # First-time insert: append a fresh section at the bottom.
+        sep = "" if content.endswith("\n") else "\n"
+        new_content = (
+            content + sep + "\n---\n\n" + AUTO_HEADING + "\n\n"
+            "_Maintained automatically by the SkillRL self-edit loop. "
+            "Each bullet is a prescriptive rule learned from a real failed episode._\n\n"
+            + region + "\n"
+        )
+
+    path.write_text(new_content, encoding="utf-8")
+
+
+def _is_valid_bullet(text: str) -> bool:
+    """Reject malformed bullets where the LLM produced 'use X not X' tautologies.
+
+    The self-editor's prompt asks for 'use FOO not BAR' contrasts. When the LLM
+    fumbles and writes the same identifier on both sides, the bullet teaches
+    nothing. We catch the common shapes and drop them.
+    """
+    # Patterns: "use `X` not `Y`", "is `X` not `Y`", "the field is `X` not `Y`"
+    for match in re.finditer(r"`([^`]+)`\s+not\s+`([^`]+)`", text):
+        if match.group(1).strip().lower() == match.group(2).strip().lower():
+            return False
+    # Also catch unquoted form: "use X not X"
+    for match in re.finditer(r"\b(?:use|is)\s+(\w+)\s+not\s+(\w+)\b", text, re.IGNORECASE):
+        if match.group(1).lower() == match.group(2).lower():
+            return False
+    return True
+
+
+# Cache fields_get results within a single self-edit pass to avoid duplicate RPCs.
+_FIELDS_CACHE: dict[str, Optional[set]] = {}
+
+
+def _model_fields(odoo_client, model: str) -> Optional[set]:
+    """Return the set of field names on `model`, or None if the model is
+    unreachable / uninstalled. Cached for the duration of the process."""
+    if model in _FIELDS_CACHE:
+        return _FIELDS_CACHE[model]
+    try:
+        fg = odoo_client.execute(model, "fields_get", [], {"attributes": ["type"]})
+        names = set(fg.keys()) if isinstance(fg, dict) else None
+    except Exception:
+        names = None
+    _FIELDS_CACHE[model] = names
+    return names
+
+
+# Phrases (lowercased) that flip a positive field assertion into a negative
+# one when they appear in the ~50 chars of context BEFORE a backticked field
+# token. Order doesn't matter; we substring-match.
+_NEG_HINTS = (
+    "never",
+    " not ",
+    "invalid",
+    "doesn't", "does not", "do not",
+    "no longer",
+    "cannot", "can't",
+    "missing", "removed", "uninstalled",
+    "there is no", "there's no",
+    "is no ", "are no ",
+    "no such", "without ",
+    "deprecated",
+)
+
+
+def _verify_bullet_facts(text: str, odoo_client) -> bool:
+    """Reject bullets that assert non-existent fields on real Odoo models.
+
+    Strategy:
+      1. Find every backticked dotted identifier — these are model names.
+      2. For each model, fetch its real fields via fields_get (cached).
+      3. Find every other backticked simple identifier (a candidate field).
+      4. For each candidate field, classify the surrounding context as a
+         POSITIVE assertion ("the field is X", "use X") or NEGATIVE ("never
+         use X", "X is not stored", "X invalid"). The classifier looks at
+         the 50 chars of text BEFORE the field token.
+      5. Reject if a positive claim references a field that does not exist
+         on any of the bullet's models.
+      6. Negative claims are NOT verified — they're already grounded in
+         the failure log.
+      7. If the model can't be reached (uninstalled / RPC error), skip
+         verification for that model — silence is safer than false reject.
+    """
+    if odoo_client is None:
+        return True
+
+    models = re.findall(r"`([a-z_]+(?:\.[a-z_]+)+)`", text)
+    if not models:
+        return True
+
+    # Build the union of valid fields across mentioned models.
+    valid_fields: set[str] = set()
+    any_reachable = False
+    for m in models:
+        fields = _model_fields(odoo_client, m)
+        if fields is not None:
+            any_reachable = True
+            valid_fields |= fields
+    if not any_reachable:
+        return True  # nothing to verify against
+
+    # Tokens we should never treat as field-name candidates.
+    PUNCTUATION_WORDS = {
+        "id", "name", "domain", "context", "model", "fields", "type",
+        "value", "true", "false", "none", "list", "dict",
+        "now", "today", "tomorrow", "yesterday",
+    }
+
+    for match in re.finditer(r"`([a-z_][a-z0-9_]*)`", text):
+        token = match.group(1)
+        # Skip dotted model names we already collected.
+        if "." in token or token in {m.split(".")[-1] for m in models}:
+            continue
+        # Skip MCP tool names (always odoo_*) — they're not Odoo fields.
+        if token.startswith("odoo_"):
+            continue
+        # Skip Python builtins / functions that show up in code samples.
+        if token in {"datetime", "timedelta", "json", "search_read", "search_count",
+                     "fields_get", "create", "write", "unlink", "default_get"}:
+            continue
+        # Skip values that look like literal column-types or keywords.
+        if token in PUNCTUATION_WORDS:
+            continue
+        # Skip very short tokens (often Python types or noise).
+        if len(token) < 3:
+            continue
+
+        prefix = text[max(0, match.start() - 50): match.start()].lower()
+        is_negative = any(hint in prefix for hint in _NEG_HINTS)
+        if is_negative:
+            continue  # negative claims trusted (came from failure log)
+
+        # Positive claim — must exist on at least one mentioned model.
+        if token not in valid_fields:
+            return False
+
+    return True
+
+
+def _bullet_signature(text: str) -> frozenset:
+    """Return a semantic dedup key: the SET of backticked identifiers
+    (model names + field names) the bullet mentions, lowercased.
+
+    Two bullets that talk about the same models and fields are treated as
+    duplicates regardless of how they phrase the rule.
+    """
+    tokens = re.findall(r"`([a-z_][a-z0-9_.]*)`", text)
+    # Drop tool names — they don't differentiate one Odoo lesson from another.
+    return frozenset(t.lower() for t in tokens if not t.startswith("odoo_"))
+
+
+def _dedupe_bullets(bullets: list[str], cap: int, odoo_client=None) -> list[str]:
+    """Dedupe by semantic signature; cap at `cap` entries.
+
+    Drops bullets that are tautologies (`use X not X`) or that make positive
+    field-name claims contradicted by live Odoo (when an odoo_client is given).
+    Two bullets that mention the same SET of backticked models/fields are
+    considered the same lesson and only the first survives.
+    """
+    seen_signatures: set[frozenset] = set()
+    out = []
+    rejected_facts = 0
+    for b in bullets:
+        b = b.strip().rstrip(".")
+        if not b:
+            continue
+        if not _is_valid_bullet(b):
+            continue
+        if odoo_client is not None and not _verify_bullet_facts(b, odoo_client):
+            rejected_facts += 1
+            log.info("  [self-edit] dropped hallucinated bullet: %s", b[:80])
+            continue
+        sig = _bullet_signature(b)
+        # Empty signature → fall back to first-60-chars lowercased so we
+        # don't collapse all signature-less bullets into one.
+        key = sig if sig else b.lower()[:60]
+        if key in seen_signatures:
+            continue
+        seen_signatures.add(key)
+        out.append(b + ".")
+        if len(out) >= cap:
+            break
+    if rejected_facts:
+        log.info("  [self-edit] dropped %d unverified bullets total", rejected_facts)
+    return out
+
+
+def _ask_for_bullets(
+    llm_client,
+    model: str,
+    tier: str,
+    skill_name: str,
+    existing: list[str],
+    failures: list[dict],
+) -> list[str]:
+    """Ask the LLM for NEW prescriptive bullets that address the failures."""
+    if not failures:
+        return []
+
+    failure_lines = []
+    for f in failures[:25]:
+        failure_lines.append(
+            f'  - tool={f["tool"]} category={f["category"]}\n'
+            f'    task: {f["task"]}\n'
+            f'    error: {f["error"]}'
+        )
+
+    existing_block = "\n".join(f"- {b}" for b in existing) if existing else "(none yet)"
+
+    prompt = f"""You maintain the "Common Pitfalls" section of the {tier}-tier Odoo skill `{skill_name}`.
+Your job: convert real agent failures into PRESCRIPTIVE one-line rules that a fresh agent can read once and never repeat the mistake.
+
+EXISTING PITFALLS (do NOT repeat these — only add NEW ones):
+{existing_block}
+
+NEW FAILURES FROM THIS GENERATION:
+{chr(10).join(failure_lines)}
+
+THE GOLDEN RULE — EPISTEMIC HUMILITY:
+A wrong bullet is much worse than no bullet. The agent that reads your rule has no way to second-guess you. Therefore:
+
+  • You MAY assert that a field DOES NOT exist (you saw the error proving it).
+  • You MAY assert that a module needs to be checked (procedural).
+  • You MUST NOT assert "the correct field is X" UNLESS you can quote the source.
+  • If you don't know the right alternative, say "verify the correct field via `odoo_get_fields(model='X')`".
+
+Think of it this way: every bullet is a contract you sign in the agent's name. If the bullet says "use foo", and foo doesn't exist, the agent will run into the wall AGAIN and trust you less. Never sign a contract you can't honor.
+
+OUTPUT RULES:
+1. One bullet per line, starting with "BULLET: ".
+2. Each bullet is a single imperative sentence, max 24 words.
+3. Use ALWAYS / NEVER / BEFORE / WHEN keywords.
+4. Reference the EXACT model + field name from the error.
+5. ONLY one of these forms is allowed for the "correct alternative" half:
+     a. "verify the correct field via `odoo_get_fields(model='M')`" (always safe)
+     b. "the field is `X`" — ONLY if X is mentioned in the failure error itself or in the existing list above
+     c. omit the alternative entirely
+6. The two halves of "use X not Y" MUST be different identifiers — never write "use X not X".
+7. Do not repeat anything in the EXISTING list, even paraphrased.
+8. If a failure is a one-off and not worth a rule, skip it.
+9. {"Read tier: every bullet must be about reading/querying — never about writing." if tier == "read" else "Write tier: bullets about creating/updating/deleting are in scope."}
+
+GOOD EXAMPLES (notice the epistemic humility):
+BULLET: NEVER query `version` on `ir.module.module` — it is not a stored field; verify the correct column via `odoo_get_fields(model='ir.module.module')`.
+BULLET: BEFORE querying `crm.lead`, call `odoo_list_models(keyword='crm')` — CRM may be uninstalled.
+BULLET: NEVER assume `probability` exists on `sale.order` — that field belongs to `crm.lead`.
+BULLET: ON `mrp.production`, do not pass `name` to `create()` — verify required fields via `odoo_get_fields(model='mrp.production')`.
+
+BAD EXAMPLES (do not produce these):
+- "Be careful with module dependencies." (vague, no model/field)
+- "When the agent queries CRM it should..." (narrative not imperative)
+- "use `value` not `default_value` on `ir.default`" (GUESSING — both might be wrong)
+- "use `qty_done` not `qty_done`" (tautology)
+- "the field is `filter_domain` not `user_id` on `ir.filters`" (HALLUCINATING a field name you didn't see in the failure log)
+- "set type to `'tree'` not `'Tree'` on `ir.ui.view`" (Odoo 17+ uses `'list'` — guessing the right value is dangerous)
+
+Output ONLY the BULLET: lines. Up to 6 new bullets max. If nothing new is worth adding, output nothing."""
+
+    try:
+        response = llm_client.messages.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=1500,
+        )
+        content = response.content[0].text if response.content else ""
+    except Exception as exc:
+        log.warning("  Self-edit LLM call failed for %s tier: %s", tier, exc)
+        return []
+
+    new_bullets = []
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("BULLET:"):
+            text = line[len("BULLET:"):].strip().lstrip("-").strip()
+            if text:
+                new_bullets.append(text)
+    return new_bullets
+
 
 def self_edit_skills(
     llm_client,
@@ -1389,109 +1744,63 @@ def self_edit_skills(
     recent_episodes: list['EpisodeResult'],
     repaired: list[dict],
     skills_dir: Path,
+    odoo_client=None,
 ) -> list[str]:
-    """Let the agent propose patches to SKILL.md reference files based on experience."""
-    # Only edit if we have enough data
+    """Surgically update each tier's auto-curated section with new pitfalls
+    learned from this generation's failures.
+
+    Tier-aware: bucket episodes by their category's tier, route the
+    failures to the matching tier's SKILL.md, ask for prescriptive bullets,
+    dedupe against existing bullets, verify against live Odoo if a client
+    is supplied, rewrite the marker-bounded region in place. Demo tier is
+    never auto-edited.
+    """
     if len(recent_episodes) < 5:
         return []
 
-    # Gather signal from episodes
-    successes = [e for e in recent_episodes if e.reward >= 0.7]
-    failures = [e for e in recent_episodes if e.reward < 0.3]
-    customize_cats = {"model-customize", "field-management", "view-customize"}
-    relevant = [e for e in recent_episodes if e.category in customize_cats]
+    # Reset the verification cache so refreshes between gens stay accurate.
+    _FIELDS_CACHE.clear()
 
-    if not relevant:
-        return []
+    # Bucket episodes by tier
+    by_tier: dict[str, list] = {}
+    for e in recent_episodes:
+        tier = CATEGORY_TIER.get(e.category, "write")
+        by_tier.setdefault(tier, []).append(e)
 
-    # Read current skill files (write tier — only write skill self-edits from RL experience)
-    skill_folder = skills_dir / "write" / "odoo-model-customize"
-    refs_dir = skill_folder / "references"
-    if not refs_dir.exists():
-        return []
-
-    current_refs = {}
-    for ref_file in refs_dir.glob("*.md"):
-        current_refs[ref_file.name] = ref_file.read_text(encoding="utf-8")[:3000]
-
-    # Build the prompt
-    success_patterns = []
-    for e in successes[:5]:
-        if e.category in customize_cats:
-            tools = [tc["tool"] for tc in e.tool_calls]
-            success_patterns.append(f"- [{e.category}] r={e.reward:.2f}: {e.task[:60]} → tools: {tools}")
-
-    failure_patterns = []
-    for e in failures[:5]:
-        if e.category in customize_cats:
-            errs = [tc for tc in e.tool_calls if '"error"' in tc.get("result_preview", "")]
-            failure_patterns.append(f"- [{e.category}] r={e.reward:.2f}: {e.task[:60]} → errors: {[e['tool'] for e in errs]}")
-
-    repair_insights = []
-    for r in repaired[:3]:
-        if r["category"] in customize_cats:
-            repair_insights.append(f"- {r['task'][:60]}: {r['corrected_approach'][:200]}")
-
-    if not success_patterns and not failure_patterns:
-        return []
-
-    prompt = f"""You are improving the reference documentation for an Odoo model customization skill.
-Based on real agent experience, suggest specific PATCHES to the reference files.
-
-CURRENT REFERENCE FILES:
-{json.dumps({k: v[:1500] for k, v in current_refs.items()}, indent=2)[:6000]}
-
-WHAT WORKED WELL:
-{chr(10).join(success_patterns) if success_patterns else "No strong successes yet"}
-
-WHAT FAILED:
-{chr(10).join(failure_patterns) if failure_patterns else "No clear failures"}
-
-REPAIRED TRAJECTORIES:
-{chr(10).join(repair_insights) if repair_insights else "None"}
-
-For each file that needs updating, output:
-FILE: filename.md
-PATCH: what to add or change (be specific — include the actual text to add)
-
-Only suggest patches that address real problems observed in the episodes.
-Do not rewrite entire files — suggest targeted additions or corrections.
-"""
-
-    try:
-        response = llm_client.messages.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=3000,
-        )
-        content = response.content[0].text if response.content else ""
-    except Exception as e:
-        log.warning("  Self-edit skills failed: %s", e)
-        return []
-
-    # Parse and apply patches
     patches_applied = []
-    blocks = re.split(r"FILE:\s*", content)
-    for block in blocks[1:]:  # skip preamble
-        lines = block.strip().split("\n", 1)
-        if len(lines) < 2:
-            continue
-        filename = lines[0].strip()
-        patch_text = lines[1].strip()
-        if patch_text.startswith("PATCH:"):
-            patch_text = patch_text[6:].strip()
 
-        ref_path = refs_dir / filename
-        if ref_path.exists() and patch_text:
-            # Append patch as a new section
-            current = ref_path.read_text(encoding="utf-8")
-            addition = f"\n\n## Learned from Experience\n\n{patch_text}\n"
-            # Only add if not already present (idempotent)
-            if patch_text[:100] not in current:
-                ref_path.write_text(current + addition, encoding="utf-8")
-                patches_applied.append(filename)
-                log.info("  Patched: %s", filename)
+    for tier, episodes in by_tier.items():
+        if tier not in TIER_SKILL_FILES:
+            continue  # demo and unknown tiers are not auto-edited
+
+        tier_subdir, skill_name = TIER_SKILL_FILES[tier]
+        skill_path = skills_dir / tier_subdir / skill_name / "SKILL.md"
+        if not skill_path.exists():
+            log.warning("  Self-edit skipped: %s not found", skill_path)
+            continue
+
+        failures = _extract_failures(episodes)
+        if not failures:
+            continue
+
+        content, existing = _read_auto_section(skill_path)
+        new_bullets = _ask_for_bullets(
+            llm_client, model, tier, skill_name, existing, failures
+        )
+        if not new_bullets:
+            continue
+
+        merged = _dedupe_bullets(existing + new_bullets, MAX_BULLETS, odoo_client)
+
+        # Only write if the bullet set actually changed
+        if merged == _dedupe_bullets(existing, MAX_BULLETS, odoo_client):
+            continue
+
+        _write_auto_section(skill_path, content, merged)
+        added = len(merged) - len(_dedupe_bullets(existing, MAX_BULLETS, odoo_client))
+        patches_applied.append(f"{tier}/{skill_name}/SKILL.md (+{added} bullets, {len(merged)} total)")
+        log.info("  Curated %s/%s/SKILL.md: +%d bullets, %d total",
+                 tier, skill_name, added, len(merged))
 
     return patches_applied
 
@@ -1716,7 +2025,8 @@ def main():
                 # [Feature 3] Self-edit SKILL.md references based on experience
                 log.info("  Self-editing skill references...")
                 patches = self_edit_skills(
-                    llm, args.model, generation_episodes, generation_repairs, SKILLS_DIR
+                    llm, args.model, generation_episodes, generation_repairs, SKILLS_DIR,
+                    odoo_client=odoo,
                 )
                 if patches:
                     log.info("  Patched %d reference files: %s", len(patches), patches)
@@ -1760,7 +2070,8 @@ def main():
 
             # Final self-edit
             patches = self_edit_skills(
-                llm, args.model, generation_episodes, generation_repairs, SKILLS_DIR
+                llm, args.model, generation_episodes, generation_repairs, SKILLS_DIR,
+                odoo_client=odoo,
             )
             if patches:
                 log.info("  Final patches: %s", patches)
