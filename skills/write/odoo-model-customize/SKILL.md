@@ -136,4 +136,16 @@ _Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescr
 - ON `mrp.bom`, the field is `product_id` not `name`; use `product_id.name` to access the BOM's product name.
 - ON `project.project`, there is no `state` field; use `project.task.state` instead for task-level status tracking.
 - ON `purchase.order`, there is no `warehouse_id` field; warehouse context comes from `stock.warehouse` or purchase line locations.
+- WHEN creating inherited tree views, use `<xpath position="after">` not `position="remove"` for column insertion; verify valid XPath positions via `odoo_get_view()` first.
+- ON `ir.filters`, do not assume `user_id` is a valid filter field; verify filterable fields via `odoo_get_fields(model='ir.filters')`.
+- NEVER call `fields_view_get()` directly on models like `sale.order`; use `odoo_get_view(model='sale.order', view_type='tree')` instead.
+- BEFORE creating automated actions on `res.partner`, verify `base.automation` exists via `odoo_list_models(keyword='automation')` — the module may be uninstalled.
+- ON `ir.ui.view`, the field is `inherit_id` not `module`; verify available fields via `odoo_get_fields(model='ir.ui.view')`.
+- NEVER assume `total_revenue` exists on `res.partner` — verify the correct field via `odoo_get_fields(model='res.partner')`.
+- ON `stock.move`, do not query or set `name` directly; verify the correct field via `odoo_get_fields(model='stock.move')`.
+- ON `stock.move`, do not query or set `quantity_done` directly; verify the correct field via `odoo_get_fields(model='stock.move')`.
+- ON `mrp.routing.workcenter`, do not assume `routing_id` exists; verify the correct field via `odoo_get_fields(model='mrp.routing.workcenter')`.
+- NEVER use `+` syntax in date domains like `'now + 7 days'`; compute cutoff dates with `fields.Date.today()` + `timedelta()` before querying.
+- ON `mrp.bom`, do not query `name` directly; use `product_id.name` to access the BOM's product name.
+- NEVER assume `expected_revenue` exists on `sale.order`; verify the correct field via `odoo_get_fields(model='sale.order')`.
 <!-- AUTO-CURATED-END -->

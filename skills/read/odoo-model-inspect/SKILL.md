@@ -173,6 +173,84 @@ Highlight anything surprising — broken references, unusual states, mismatches 
 
 ---
 
+## BoM recursion playbook
+
+When the user asks "where is X used?" or "walk the BoM for Y", the bottleneck is **navigation**, not field knowledge. Follow this exact recipe to avoid wandering the schema.
+
+### "Where is component X used?" — recursive where-used
+
+```
+1. Resolve X to a product.product id:
+     odoo_search_read(
+       model="product.product",
+       domain=[("default_code","=","X_CODE")],
+       fields=["id","name","product_tmpl_id"],
+       limit=1)
+
+2. Find every BoM line that references it directly:
+     odoo_search_read(
+       model="mrp.bom.line",
+       domain=[("product_id","=",X_ID)],
+       fields=["bom_id","product_qty"],
+       limit=200)
+
+3. Resolve the parent BoM and its product (one batch call, not per-line):
+     bom_ids = unique [line["bom_id"][0] for line in step 2]
+     odoo_search_read(
+       model="mrp.bom",
+       domain=[("id","in",bom_ids)],
+       fields=["id","product_tmpl_id","product_qty","code","type"])
+
+4. Recurse ONE level only when the user asked for "any level":
+     For each parent template, repeat from step 2 using the
+     parent template's product as the search target.
+     Stop when no new BoMs are found OR after 4 levels (cycle guard).
+```
+
+**Two failure modes to avoid:**
+- Calling `odoo_search_read` once per BoM line in step 3 — always batch by `("id","in",ids)`.
+- Recursing without a visited set — BoMs can reference each other indirectly. Track which `(template_id)` pairs you've already expanded.
+
+### "Walk the BoM for product Y" — top-down expansion
+
+```
+1. Get the top BoM:
+     odoo_search_read(
+       model="mrp.bom",
+       domain=[("product_tmpl_id","=",TMPL_ID),("type","=","normal")],
+       fields=["id","product_qty"],
+       limit=1)
+
+2. Get its lines:
+     odoo_search_read(
+       model="mrp.bom.line",
+       domain=[("bom_id","=",BOM_ID)],
+       fields=["product_id","product_qty"],
+       limit=200)
+
+3. For each line product, look up its own BoM in ONE batch:
+     line_product_ids = [l["product_id"][0] for l in lines]
+     line_tmpl_ids = read_those_products_to_get_template_ids
+     odoo_search_read(
+       model="mrp.bom",
+       domain=[("product_tmpl_id","in",line_tmpl_ids)],
+       fields=["id","product_tmpl_id","product_qty"])
+
+4. Recurse on every line whose product has its own BoM.
+   Multiply qty through each level: total_at_leaf = parent_qty × child_qty.
+```
+
+**For "I need N units of Y, what raw materials do I need?":**
+- At each recursion level, multiply the line qty by the cumulative qty from the parent path
+- Aggregate leaf totals into a dict keyed by leaf product id
+- Skip nodes whose `mrp.bom.type` is `'phantom'` (kit) — kits explode but their parent product is not manufactured
+
+### Why this matters
+
+Without this recipe, the agent typically uses 12-17 tool calls and still gets the totals wrong. With the recipe, the same task takes 4-6 calls and the math is right.
+
+---
+
 ## Common Pitfalls (auto-curated by RL)
 
 _Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescriptive rule learned from a real failed episode._
@@ -187,7 +265,6 @@ _Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescr
 - NEVER filter on `ir.module.module.category` or `installable`; use `state` field instead to identify uninstalled modules.
 - NEVER pass bare list values in domain filters on `ir.module.module`; wrap conditions in proper tuple syntax like `[('state', 'in', ['uninstalled'])]`.
 - ON `stock.move`, use `quantity` not `quantity_done`; `quantity_done` is invalid for filtering.
-- NEVER query `product.product.qty_available` in domain filters; it is computed and not stored—fetch product IDs first, then read the field.
 - ON `account.payment`, use `date` not `payment_date` to filter by payment timing.
 - ON `account.move`, the field is `move_type` not `type`; use `move_type` in domain filters for invoice classification.
 - NEVER use `%(date_minus_7_days)s` syntax in domain filters; calculate dates in Python and pass literal ISO strings like `'2024-01-15'`.
@@ -201,8 +278,12 @@ _Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescr
 - NEVER filter on `ir.module.module.dependency.state`; query `ir.module.module.dependency` separately with its own search.
 - NEVER filter on `quantity_done` on `stock.move`; verify the correct field via `odoo_get_fields(model='stock.move')`.
 - NEVER filter on `qty_done` on `stock.move.line`; verify the correct field via `odoo_get_fields(model='stock.move.line')`.
-- NEVER query `qty_available` on `stock.quant` in domain filters; it is computed—fetch quant IDs first, then read the field.
 - NEVER filter on `invoice_due_date` on `account.move`; verify the correct field via `odoo_get_fields(model='account.move')`.
 - NEVER use placeholder syntax like `%(today-7d)s` in domain filters; calculate the target date in Python first, then pass as ISO string.
 - NEVER filter on `numbercall` on `ir.cron`; verify the correct field via `odoo_get_fields(model='ir.cron')`.
+- NEVER filter on `last_call` on `ir.cron`; verify the correct field via `odoo_get_fields(model='ir.cron')`.
+- NEVER filter on `last_login` on `res.users`; verify the correct field via `odoo_get_fields(model='res.users')`.
+- NEVER filter on `version` on `ir.module.module`; verify the correct field via `odoo_get_fields(model='ir.module.module')`.
+- NEVER filter on `res.users` using related field syntax like `login_date` via `log_ids.create_date`; query `ir.logging` separately instead.
+- NEVER assume you can traverse Many2one relations in domain filters; if the error says "is not a Many2one", query the related model separately.
 <!-- AUTO-CURATED-END -->
