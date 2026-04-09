@@ -199,4 +199,10 @@ _Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescr
 - NEVER use `%(date_start)s` or similar placeholders in domain filters; calculate dates in Python and pass literal ISO strings.
 - NEVER use `now()` in domain filter expressions; calculate the current datetime in Python first, then pass as ISO string.
 - NEVER filter on `ir.module.module.dependency.state`; query `ir.module.module.dependency` separately with its own search.
+- NEVER filter on `quantity_done` on `stock.move`; verify the correct field via `odoo_get_fields(model='stock.move')`.
+- NEVER filter on `qty_done` on `stock.move.line`; verify the correct field via `odoo_get_fields(model='stock.move.line')`.
+- NEVER query `qty_available` on `stock.quant` in domain filters; it is computed—fetch quant IDs first, then read the field.
+- NEVER filter on `invoice_due_date` on `account.move`; verify the correct field via `odoo_get_fields(model='account.move')`.
+- NEVER use placeholder syntax like `%(today-7d)s` in domain filters; calculate the target date in Python first, then pass as ISO string.
+- NEVER filter on `numbercall` on `ir.cron`; verify the correct field via `odoo_get_fields(model='ir.cron')`.
 <!-- AUTO-CURATED-END -->
