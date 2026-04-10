@@ -113,3 +113,42 @@ Present results in the format that matches the question:
 - **Audit / health check** → grouped by severity (Critical / Warning / OK)
 - **Listing** → table with most informative columns first
 - **Comparison** → side-by-side table
+
+---
+
+## Common Pitfalls (auto-curated by RL)
+
+_Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescriptive rule learned from a real failed episode._
+
+<!-- AUTO-CURATED-START -->
+- NEVER use `now()` in domain expressions for `ir.cron` date fields — use `fields.Datetime.now()` or verify correct syntax via `odoo_get_fields(model='ir.cron')`.
+- NEVER query `numbercall` on `ir.cron` — verify the correct field via `odoo_get_fields(model='ir.cron')`.
+- NEVER filter on `ir.module.module.dependency.state` — it is not a stored field; query `ir.module.module.state` instead.
+- NEVER query `version` on `ir.module.module` — it is not a stored field; verify the correct field via `odoo_get_fields(model='ir.module.module')`.
+- NEVER query `category` on `ir.module.module` — it is not a stored field; verify the correct field via `odoo_get_fields(model='ir.module.module')`.
+- NEVER query `depend_id` on `ir.module.module.dependency` — it is not a stored field; verify the correct field via `odoo_get_fields(model='ir.module.module.dependency')`.
+- NEVER query `qty_available` on `product.product` — it is not a stored field; verify the correct field via `odoo_get_fields(model='product.product')`.
+- NEVER query `name` on `stock.move` — it is not a stored field; verify the correct field via `odoo_get_fields(model='stock.move')`.
+- NEVER query `quantity_done` on `stock.move` — it is not a stored field; verify the correct field via `odoo_get_fields(model='stock.move')`.
+- NEVER query `qty_done` on `stock.move.line` — it is not a stored field; verify the correct field via `odoo_get_fields(model='stock.move.line')`.
+- NEVER query `type` on `account.move` — it is not a stored field; verify the correct field via `odoo_get_fields(model='account.move')`.
+- NEVER query `post_date` on `account.move` — it is not a stored field; verify the correct field via `odoo_get_fields(model='account.move')`.
+- NEVER use `%(today)s` in domain expressions — use `fields.Date.today()` or verify correct syntax via `odoo_get_fields(model='account.move')`.
+- WHEN building domains for `odoo_search_count`, ensure the domain argument is a list of tuples, not a string or malformed structure.
+- NEVER query `last_login` on `res.users` — it is not a stored field; verify the correct field via `odoo_get_fields(model='res.users')`.
+- NEVER query `groups_id` on `res.users` — it is not a stored field; verify the correct field via `odoo_get_fields(model='res.users')`.
+- WHEN passing a domain to `odoo_search_count`, ensure it is a list of tuples, not a nested list or other structure — unhashable type errors indicate malformed domain syntax.
+- NEVER query `last_call` on `ir.cron` — it is not a stored field; verify the correct field via `odoo_get_fields(model='ir.cron')`.
+- NEVER query `timestamp` on `res.users.log` — it is not a stored field; verify the correct field via `odoo_get_fields(model='res.users.log')`.
+- NEVER query `name` on `privacy.log` — it is not a stored field; verify the correct field via `odoo_get_fields(model='privacy.log')`.
+- NEVER query `name` on `res.device.log` — it is not a stored field; verify the correct field via `odoo_get_fields(model='res.device.log')`.
+- NEVER attempt to query `auth.totp.rate.limit.log` without verifying group permissions — access may be restricted to administrators only.
+- NEVER use `now()` in domain expressions for date fields — use `fields.Datetime.now()` or `fields.Date.today()` instead.
+- NEVER query `reserved_uom_qty` on `stock.move.line` — it is not a stored field; verify the correct field via `odoo_get_fields(model='stock.move.line')`.
+- NEVER use `today()` in domain expressions — use `fields.Date.today()` or `fields.Datetime.now()` instead.
+- NEVER query `description` on `account.move.line` — it is not a stored field; verify the correct field via `odoo_get_fields(model='account.move.line')`.
+- NEVER query `payment_date` on `account.payment` — it is not a stored field; verify the correct field via `odoo_get_fields(model='account.payment')`.
+- NEVER query `credit_exposure` on `res.partner` — it is not a stored field; verify the correct field via `odoo_get_fields(model='res.partner')`.
+- NEVER query `invoice_due_date` on `account.move` — it is not a stored field; verify the correct field via `odoo_get_fields(model='account.move')`.
+- NEVER query `doall` on `ir.cron` — it is not a stored field; verify the correct field via `odoo_get_fields(model='ir.cron')`.
+<!-- AUTO-CURATED-END -->
