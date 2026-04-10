@@ -148,4 +148,8 @@ _Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescr
 - NEVER use `+` syntax in date domains like `'now + 7 days'`; compute cutoff dates with `fields.Date.today()` + `timedelta()` before querying.
 - ON `mrp.bom`, do not query `name` directly; use `product_id.name` to access the BOM's product name.
 - NEVER assume `expected_revenue` exists on `sale.order`; verify the correct field via `odoo_get_fields(model='sale.order')`.
+- WHEN creating inherited tree views, verify the parent view exists via `odoo_get_view()` before writing the `<xpath>` element.
+- ON inherited `ir.ui.view` records, always set `inherit_id` to reference the parent view's database ID, not its name.
+- NEVER assume `last_time_contacted` exists on `res.partner`; verify the correct field via `odoo_get_fields(model='res.partner')`.
+- BEFORE querying `crm.lead`, verify CRM module is installed via `odoo_list_models(keyword='crm')` — if uninstalled, score prospects via `sale.order` fields instead.
 <!-- AUTO-CURATED-END -->
