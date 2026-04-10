@@ -1,6 +1,6 @@
 ---
 name: odoo-model-inspect
-description: "Inspect, query, and audit Odoo models and records WITHOUT making any changes. Use for: read field definitions, list models, get view XML, search records, count matches, audit data quality, run health diagnostics, explain how a model is structured. WHEN: inspect, look at, show me, what fields, what records, count, audit, list, find, query, check, verify, explore, describe. DO NOT USE WHEN: the user wants to create, modify, update, delete, set defaults, or change anything — switch to odoo-model-customize (write tier)."
+description: "General Odoo model inspection: field definitions, view XML, record counts, model structure. READ-ONLY. WHEN: what fields, model structure, view XML, count records, list models, get fields, general query. DO NOT USE WHEN: the question is about a specific domain — use odoo-system-inspect (modules/cron/logs), odoo-stock-inspect (inventory/moves), odoo-mrp-inspect (manufacturing/BoMs), or odoo-accounting-inspect (invoices/payments) instead."
 license: MIT
 metadata:
   author: oconsole
@@ -10,280 +10,106 @@ metadata:
 
 # Odoo Model Inspect (read-only)
 
-> **READ-ONLY GUARANTEE.** This skill only uses Odoo tools that read data. It must NEVER call `odoo_set_default`, `odoo_create`, `odoo_modify_action`, `odoo_delete`, or `odoo_execute` with mutating methods (`write`, `create`, `unlink`, `action_*`, `button_*`). If the user asks for a change, stop and tell them they need the `odoo-model-customize` skill from the write tier.
+> **READ-ONLY.** This skill never calls mutating tools. If the user asks for changes, refer them to the write tier (`odoo-model-customize`).
 
-## Triggers
+## When to use this vs a domain skill
 
-Activate this skill when the user wants to:
-- See what fields exist on a model
-- Look at the structure of a record (form view, tree view, search view)
-- Count how many records match some condition
-- Find records that meet a filter
-- Audit data quality (negative stocks, missing required fields, broken references)
-- Diagnose what's going on in the Odoo instance
-- Understand how a custom field, view, or window action is configured
-- Compare what's installed vs what's available
+| Question is about... | Use this skill | Use instead |
+|---|---|---|
+| Model structure, fields, views | Yes | — |
+| General "how many X?" counts | Yes | — |
+| Modules, cron jobs, error logs, users | — | `odoo-system-inspect` |
+| Stock levels, moves, transfers, reorder rules | — | `odoo-stock-inspect` |
+| Manufacturing orders, BoMs, components | — | `odoo-mrp-inspect` |
+| Invoices, payments, journal entries | — | `odoo-accounting-inspect` |
 
 ## Compatibility — Odoo 18 and Odoo 19
 
-Verified on **Odoo 18.0** and **Odoo 19.0**. The read API (`search_read`, `search_count`, `fields_get`, `read`) is stable across both versions. A few schema details to remember:
+Verified on both. The read API is stable across versions.
 
 | Field | Odoo 18 | Odoo 19 |
 |---|---|---|
 | `ir.model.order` (mirrors `_order`) | Available | Available |
 | `ir.model.rec_name` | Does not exist | Does not exist |
 | `ir.model.abstract`, `ir.model.fold_name` | Do not exist | Available |
-| `ir.module.module.installed_version` | Available | Available |
-| `ir.cron.nextcall` | Available | Available |
-
-### Field names that exist in NEITHER version (do not query)
-
-| Wrong | What to use |
-|---|---|
-| `ir.model.rec_name` | Infer from `ir.model.fields`: `name` if present, else `x_name`, else `id` |
-| `ir.module.module.version` | `installed_version` |
-| `ir.cron.numbercall`, `ir.cron.next_call` | `nextcall` (note the spelling) |
-| `res.users.last_login` | `login_date` |
-| `ir.logging.path_ids` | `path` (Char) |
-| `ir.module.module.dependency.state` | Computed, not stored — read records and filter client-side |
 
 ## Allowed Tools (READ ONLY)
 
-| Tool | Purpose |
+**If using MCP server (`odoo-simple-mcp`):**
+
+| MCP tool | Purpose |
 |------|---------|
-| `odoo_model_info` | Get comprehensive model metadata (fields, views, actions, defaults) |
+| `odoo_model_info` | Comprehensive model metadata in one call |
 | `odoo_get_fields` | Field definitions for a model |
 | `odoo_get_view` | Fully merged view XML after inheritance |
 | `odoo_search_read` | Read records matching a domain |
-| `odoo_search_count` | Count records matching a domain (no data transfer) |
+| `odoo_search_count` | Count records matching a domain |
 | `odoo_list_models` | List installed models, optional keyword filter |
 | `odoo_doctor` | Run health diagnostics |
-| `odoo_execute` | **Only with read methods**: `read`, `read_group`, `name_search`, `default_get`, `fields_get`, `name_get`, `search`, `search_count`. **NEVER** `write`, `create`, `unlink`, or any `action_*` / `button_*`. |
 
-## Forbidden Tools
+**If using raw JSON-RPC (no MCP):**
 
-| Tool | Why forbidden in this skill |
-|------|---|
-| `odoo_set_default` | Mutates `ir.default` records |
-| `odoo_create` | Creates records |
-| `odoo_modify_action` | Mutates `ir.actions.act_window` |
-| `odoo_delete` | Deletes records |
-| `odoo_execute` with `write` / `create` / `unlink` / `action_*` / `button_*` | Mutates state |
-
-If the user asks for any of these, respond:
-
-> "That's a write operation — this skill is read-only. Install the `odoo-skills-write` plugin and the `odoo-model-customize` skill will handle it."
+| RPC call | Equivalent |
+|---|---|
+| `execute(model, "fields_get", [], {"attributes": [...]})` | `odoo_get_fields` |
+| `execute(model, "search_read", domain, fields=..., limit=...)` | `odoo_search_read` |
+| `execute(model, "search_count", domain)` | `odoo_search_count` |
+| `execute(model, "get_views", [[False, view_type]])` | `odoo_get_view` |
 
 ## Rules
 
-1. **Verify scope before fetching detail.** Use `odoo_search_count` first to gauge how many records match. If the count is huge, narrow the domain before reading.
-2. **Specific domains, not broad scans.** Always include the most discriminating filters you have. Avoid `odoo_search_read(model, [], …)` unless the user explicitly asked for "all".
-3. **Limit reads.** Default `limit=50`. Bump to 200 only if the user wants a full listing.
-4. **Project only the fields you need.** Don't ask for `*` — list field names so the response stays small.
-5. **Confirm model existence first.** When unsure whether a model is installed, call `odoo_list_models(keyword=…)` or wrap the read in error handling. Do not assume `crm.lead`, `helpdesk.ticket`, etc. exist on every instance.
-6. **Be honest about limits.** If the connected Odoo doesn't expose what the user asked for (e.g., `_order` for a model on Odoo 17 where `ir.model.order` was added later), say so plainly.
+1. **Count before fetching.** Use `search_count` first. If count is huge, narrow the domain.
+2. **Project only needed fields.** List field names explicitly — never ask for all fields.
+3. **Confirm model existence.** Call `odoo_list_models(keyword=...)` before querying models that may not be installed (`crm.lead`, `helpdesk.ticket`, `mrp.production`).
+4. **Default limit=50.** Bump to 200 only for full listings.
 
----
+## Generic domain rules
 
-## Steps
+These apply to ALL models, in every domain skill:
 
-| # | Action | Tool |
-|---|--------|------|
-| 1 | **Identify the model** — confirm it exists on this instance | `odoo_list_models` |
-| 2 | **Get the shape** — fields, views, actions, defaults in one call | `odoo_model_info` |
-| 3 | **Scope the query** — count first to gauge magnitude | `odoo_search_count` |
-| 4 | **Read the data** — narrow domain, projected fields, sensible limit | `odoo_search_read` |
-| 5 | **Cross-reference if needed** — related models for full picture | `odoo_search_read` on related model |
-| 6 | **Report** — summarize findings, group by severity (OK / Warning / Critical) when auditing |
+> NEVER use `now()`, `%(today)s`, `%(date_start)s`, or any placeholder in domain filters. Compute dates in Python first, pass literal ISO strings like `"2024-01-15"`.
 
----
+> NEVER pass bare list values in domains. Use proper tuple syntax: `[("state","in",["draft","posted"])]`.
 
-## Common Inspection Recipes
+> NEVER assume you can filter on related fields across non-Many2one relations. If the error says "is not a Many2one", query the related model separately.
+
+## Recipes
 
 ### "What fields are on this model?"
-```
-odoo_model_info(model="sale.order")
-```
-Returns field count, types, custom fields, required fields, relational fields. One call.
+
+**MCP:** `odoo_model_info(model="sale.order")`
+**Raw RPC:** `execute("ir.model", "search_read", ...)` + `execute("ir.model.fields", "search_read", ...)`
+
+Returns field count, types, custom fields, required fields, relational fields.
 
 ### "How many X are there?"
-```
-odoo_search_count(model="sale.order", domain=[["state","=","sale"]])
-```
 
-### "Find products with negative stock"
-```
-odoo_search_count(model="stock.quant", domain=[["quantity","<",0]])
-# If > 0, fetch details:
-odoo_search_read(model="stock.quant",
-    domain=[["quantity","<",0]],
-    fields=["product_id","location_id","quantity","reserved_quantity"],
-    limit=100)
-```
-
-### "Audit cron job health"
-```
-# Cron states
-odoo_search_read(model="ir.cron",
-    domain=[["active","=",True]],
-    fields=["name","nextcall","interval_number","interval_type"],
-    limit=200)
-# Recent failures
-odoo_search_count(model="ir.logging",
-    domain=[["level","=","ERROR"],["create_date",">",one_day_ago]])
-```
-Note `ir.cron.nextcall` (not `numbercall`), `ir.logging.path` (not `path_ids`).
-
-### "List installed modules"
-```
-odoo_search_read(model="ir.module.module",
-    domain=[["state","=","installed"]],
-    fields=["name","installed_version","summary"],
-    limit=500)
-```
-Note `installed_version`, not `version`.
+**MCP:** `odoo_search_count(model="sale.order", domain=[["state","=","sale"]])`
+**Raw RPC:** `execute("sale.order", "search_count", [["state","=","sale"]])`
 
 ### "Show defaults set for a model"
+
 ```
 odoo_search_read(model="ir.default",
-    domain=[["field_id.model_id.model","=","sale.order"]],
-    fields=["field_id","user_id","company_id","json_value"],
-    limit=100)
+  domain=[["field_id.model_id.model","=","sale.order"]],
+  fields=["field_id","user_id","company_id","json_value"],
+  limit=100)
 ```
-`ir.default` has no `model_id`/`model` column — traverse `field_id`.
+
+> `ir.default` has no `model_id` or `model` column. Traverse via `field_id.model_id.model`.
 
 ### "Get the rendered form view"
-```
-odoo_get_view(model="res.partner", view_type="form")
-```
-Returns merged XML after inheritance — what the user actually sees.
 
----
+**MCP:** `odoo_get_view(model="res.partner", view_type="form")`
+**Raw RPC:** `execute("res.partner", "get_views", [[False, "form"]])`
+
+Returns merged XML after all inheritance — what the user actually sees.
 
 ## Reporting
 
-When you've finished an inspection, present results in the format that matches the question:
+Present results in the format that matches the question:
 
-- **Single record / structure question** → field table or JSON snippet
-- **Audit / health check** → grouped by severity (Critical / Warning / OK), with counts
-- **Listing** → table with the most informative columns first
+- **Structure question** → field table or JSON snippet
+- **Audit / health check** → grouped by severity (Critical / Warning / OK)
+- **Listing** → table with most informative columns first
 - **Comparison** → side-by-side table
-
-Highlight anything surprising — broken references, unusual states, mismatches between related models.
-
----
-
-## BoM recursion playbook
-
-When the user asks "where is X used?" or "walk the BoM for Y", the bottleneck is **navigation**, not field knowledge. Follow this exact recipe to avoid wandering the schema.
-
-### "Where is component X used?" — recursive where-used
-
-```
-1. Resolve X to a product.product id:
-     odoo_search_read(
-       model="product.product",
-       domain=[("default_code","=","X_CODE")],
-       fields=["id","name","product_tmpl_id"],
-       limit=1)
-
-2. Find every BoM line that references it directly:
-     odoo_search_read(
-       model="mrp.bom.line",
-       domain=[("product_id","=",X_ID)],
-       fields=["bom_id","product_qty"],
-       limit=200)
-
-3. Resolve the parent BoM and its product (one batch call, not per-line):
-     bom_ids = unique [line["bom_id"][0] for line in step 2]
-     odoo_search_read(
-       model="mrp.bom",
-       domain=[("id","in",bom_ids)],
-       fields=["id","product_tmpl_id","product_qty","code","type"])
-
-4. Recurse ONE level only when the user asked for "any level":
-     For each parent template, repeat from step 2 using the
-     parent template's product as the search target.
-     Stop when no new BoMs are found OR after 4 levels (cycle guard).
-```
-
-**Two failure modes to avoid:**
-- Calling `odoo_search_read` once per BoM line in step 3 — always batch by `("id","in",ids)`.
-- Recursing without a visited set — BoMs can reference each other indirectly. Track which `(template_id)` pairs you've already expanded.
-
-### "Walk the BoM for product Y" — top-down expansion
-
-```
-1. Get the top BoM:
-     odoo_search_read(
-       model="mrp.bom",
-       domain=[("product_tmpl_id","=",TMPL_ID),("type","=","normal")],
-       fields=["id","product_qty"],
-       limit=1)
-
-2. Get its lines:
-     odoo_search_read(
-       model="mrp.bom.line",
-       domain=[("bom_id","=",BOM_ID)],
-       fields=["product_id","product_qty"],
-       limit=200)
-
-3. For each line product, look up its own BoM in ONE batch:
-     line_product_ids = [l["product_id"][0] for l in lines]
-     line_tmpl_ids = read_those_products_to_get_template_ids
-     odoo_search_read(
-       model="mrp.bom",
-       domain=[("product_tmpl_id","in",line_tmpl_ids)],
-       fields=["id","product_tmpl_id","product_qty"])
-
-4. Recurse on every line whose product has its own BoM.
-   Multiply qty through each level: total_at_leaf = parent_qty × child_qty.
-```
-
-**For "I need N units of Y, what raw materials do I need?":**
-- At each recursion level, multiply the line qty by the cumulative qty from the parent path
-- Aggregate leaf totals into a dict keyed by leaf product id
-- Skip nodes whose `mrp.bom.type` is `'phantom'` (kit) — kits explode but their parent product is not manufactured
-
-### Why this matters
-
-Without this recipe, the agent typically uses 12-17 tool calls and still gets the totals wrong. With the recipe, the same task takes 4-6 calls and the math is right.
-
----
-
-## Common Pitfalls (auto-curated by RL)
-
-_Maintained automatically by the SkillRL self-edit loop. Each bullet is a prescriptive rule learned from a real failed episode._
-
-<!-- AUTO-CURATED-START -->
-- NEVER use `numbercall` on `ir.cron`; use `nextcall` and `state` to identify stuck scheduled actions instead.
-- ALWAYS use `installed_version` on `ir.module.module`; NEVER use `version` (Invalid field).
-- WHEN querying date ranges on `ir.logging`, use `fields.Datetime.now()` in Python context, not `now()` in domain expressions.
-- NEVER filter on `ir.module.module.dependency.state`; it is not stored and cannot be queried directly.
-- WHEN checking module dependencies, query `ir.module.module.dependency` separately, not as a nested field filter.
-- NEVER pass list values directly in domain filters; wrap multi-value conditions in proper OR/AND tuples.
-- NEVER filter on `ir.module.module.category` or `installable`; use `state` field instead to identify uninstalled modules.
-- NEVER pass bare list values in domain filters on `ir.module.module`; wrap conditions in proper tuple syntax like `[('state', 'in', ['uninstalled'])]`.
-- ON `stock.move`, use `quantity` not `quantity_done`; `quantity_done` is invalid for filtering.
-- ON `account.payment`, use `date` not `payment_date` to filter by payment timing.
-- ON `account.move`, the field is `move_type` not `type`; use `move_type` in domain filters for invoice classification.
-- NEVER use `%(date_minus_7_days)s` syntax in domain filters; calculate dates in Python and pass literal ISO strings like `'2024-01-15'`.
-- WHEN filtering `account.move` by date range, compute the target date in Python first, then pass it as a string in the domain.
-- ON `ir.cron`, use `nextcall` and `state` to identify stuck actions; NEVER use `last_call` (Invalid field).
-- NEVER filter on `installable` field on `ir.module.module`; use `state` field to identify uninstalled modules.
-- NEVER use `now()` in domain filters on `stock.move`; calculate the current datetime in Python first.
-- NEVER read `name` field on `stock.move` for identification; use `id` or `reference` field instead.
-- NEVER use `%(date_start)s` or similar placeholders in domain filters; calculate dates in Python and pass literal ISO strings.
-- NEVER use `now()` in domain filter expressions; calculate the current datetime in Python first, then pass as ISO string.
-- NEVER filter on `ir.module.module.dependency.state`; query `ir.module.module.dependency` separately with its own search.
-- NEVER filter on `quantity_done` on `stock.move`; verify the correct field via `odoo_get_fields(model='stock.move')`.
-- NEVER filter on `qty_done` on `stock.move.line`; verify the correct field via `odoo_get_fields(model='stock.move.line')`.
-- NEVER filter on `invoice_due_date` on `account.move`; verify the correct field via `odoo_get_fields(model='account.move')`.
-- NEVER use placeholder syntax like `%(today-7d)s` in domain filters; calculate the target date in Python first, then pass as ISO string.
-- NEVER filter on `numbercall` on `ir.cron`; verify the correct field via `odoo_get_fields(model='ir.cron')`.
-- NEVER filter on `last_call` on `ir.cron`; verify the correct field via `odoo_get_fields(model='ir.cron')`.
-- NEVER filter on `last_login` on `res.users`; verify the correct field via `odoo_get_fields(model='res.users')`.
-- NEVER filter on `version` on `ir.module.module`; verify the correct field via `odoo_get_fields(model='ir.module.module')`.
-- NEVER filter on `res.users` using related field syntax like `login_date` via `log_ids.create_date`; query `ir.logging` separately instead.
-- NEVER assume you can traverse Many2one relations in domain filters; if the error says "is not a Many2one", query the related model separately.
-<!-- AUTO-CURATED-END -->

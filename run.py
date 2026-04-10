@@ -54,118 +54,12 @@ logging.basicConfig(
 log = logging.getLogger("skill_rl")
 
 # ---------------------------------------------------------------------------
-# Odoo Client (self-contained, copied from odoo_mcp_server.py)
+# Odoo Client — imported from the editable odoo-simple-mcp package
+# (pip install -e /home/ec2-user/odoo-mcp-server)
+# Changes to the client should be made in odoo-mcp-server, not here.
 # ---------------------------------------------------------------------------
 
-import httpx
-
-
-class OdooClient:
-    """Lightweight Odoo JSON-RPC client."""
-
-    def __init__(self, url: str, database: str, username: str,
-                 password: str = None, api_key: str = None):
-        self.url = url.rstrip("/")
-        self.database = database
-        self.username = username
-        self.password = password
-        self.api_key = api_key
-        self.uid: Optional[int] = None
-        self.version: Optional[str] = None
-        self._http = httpx.Client(timeout=30.0)
-
-    def authenticate(self) -> int:
-        self.version = self._detect_version()
-        if self.api_key and self._is_v19_plus():
-            self.uid = self._auth_json2()
-        else:
-            self.uid = self._auth_jsonrpc()
-        if not self.uid:
-            raise ConnectionError(f"Auth failed: {self.username}@{self.url}/{self.database}")
-        return self.uid
-
-    def _detect_version(self) -> str:
-        try:
-            resp = self._jsonrpc(f"{self.url}/jsonrpc", "call",
-                                 service="common", method="version", args=[])
-            return resp.get("server_version", "unknown")
-        except Exception:
-            return "unknown"
-
-    def _is_v19_plus(self) -> bool:
-        try:
-            return int((self.version or "0").split(".")[0]) >= 19
-        except (ValueError, IndexError):
-            return False
-
-    def _auth_jsonrpc(self) -> Optional[int]:
-        try:
-            result = self._jsonrpc(f"{self.url}/jsonrpc", "call",
-                                   service="common", method="authenticate",
-                                   args=[self.database, self.username, self.password or "", {}])
-            return result if isinstance(result, int) else None
-        except Exception:
-            return None
-
-    def _auth_json2(self) -> Optional[int]:
-        try:
-            resp = self._http.get(f"{self.url}/api/res.users/whoami",
-                                  headers={"Authorization": f"Bearer {self.api_key}"})
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("uid") or data.get("id")
-        except Exception:
-            return None
-
-    def execute(self, model: str, method: str, *args: Any, **kwargs: Any) -> Any:
-        if self.uid is None:
-            raise ConnectionError("Not authenticated.")
-        if self._is_v19_plus() and self.api_key:
-            return self._exec_json2(model, method, *args, **kwargs)
-        return self._exec_jsonrpc(model, method, *args, **kwargs)
-
-    def _exec_jsonrpc(self, model: str, method: str, *args, **kwargs) -> Any:
-        return self._jsonrpc(f"{self.url}/jsonrpc", "call",
-                             service="object", method="execute_kw",
-                             args=[self.database, self.uid, self.password or "",
-                                   model, method, list(args), kwargs])
-
-    def _exec_json2(self, model: str, method: str, *args, **kwargs) -> Any:
-        payload: dict[str, Any] = {}
-        if args:
-            payload["args"] = list(args)
-        if kwargs:
-            payload.update(kwargs)
-        resp = self._http.post(f"{self.url}/api/{model}/{method}",
-                               json=payload,
-                               headers={"Authorization": f"Bearer {self.api_key}"})
-        resp.raise_for_status()
-        return resp.json()
-
-    def search_read(self, model, domain=None, fields=None, limit=100, offset=0, order=None):
-        kw = {"limit": limit, "offset": offset}
-        if fields:
-            kw["fields"] = fields
-        if order:
-            kw["order"] = order
-        return self.execute(model, "search_read", domain or [], **kw)
-
-    def search_count(self, model, domain=None):
-        return self.execute(model, "search_count", domain or [])
-
-    def _jsonrpc(self, url, rpc_method, **params):
-        payload = {"jsonrpc": "2.0", "method": rpc_method, "params": params, "id": 1}
-        resp = self._http.post(url, json=payload)
-        resp.raise_for_status()
-        body = resp.json()
-        if "error" in body:
-            err = body["error"]
-            msg = err.get("data", {}).get("message", err.get("message", str(err)))
-            raise ConnectionError(f"Odoo error: {msg}")
-        return body.get("result")
-
-    def close(self):
-        self._http.close()
+from odoo_mcp_server import OdooClient, OdooConnectionError
 
 
 # ---------------------------------------------------------------------------

@@ -104,104 +104,76 @@
     },
     {
       "id": "GS-018",
-      "title": "Use odoo_model_info for Comprehensive Model Understanding",
-      "principle": "When working with unfamiliar models or needing to understand their structure, views, and actions, use odoo_model_info to get complete metadata in one call.",
-      "application": "Call odoo_model_info before making complex modifications to understand available views, actions, and field relationships. This prevents errors from missing context about model structure."
+      "title": "Leverage odoo_doctor for Rapid System Assessment",
+      "principle": "odoo_doctor provides a comprehensive health snapshot in a single call. Use it as the primary entry point for system-wide diagnostics before drilling into specific models.",
+      "application": "Always start health-check tasks with odoo_doctor. It efficiently identifies module issues, cron problems, and system anomalies. Only follow up with targeted model queries if odoo_doctor output is unclear or requires deeper investigation."
     },
     {
       "id": "GS-019",
-      "title": "Leverage Specialized Mutation Tools for Configuration",
-      "principle": "For configuration changes (defaults, view modifications, action parameters), use specialized tools like odoo_set_default and odoo_modify_action rather than generic write operations.",
-      "application": "Use odoo_set_default for ir.default records to set field defaults globally. Use odoo_modify_action to update window action parameters (sorting, filtering, domain). These tools handle Odoo-specific logic correctly."
+      "title": "Combine odoo_get_fields with Targeted Queries",
+      "principle": "Use odoo_get_fields early in investigation to understand model structure, then construct precise search_read queries that fetch only necessary fields and apply tight domain filters.",
+      "application": "Before querying an unfamiliar model, call odoo_get_fields to identify key fields (state, date, status). Then use these fields in domain filters and field selections in search_read to minimize data transfer and improve clarity."
     },
     {
       "id": "GS-020",
-      "title": "Combine Multiple Count Queries for Comprehensive Metrics",
-      "principle": "When gathering system metrics or data inventory, execute multiple search_count queries in sequence to build a complete picture of record distribution across core models.",
-      "application": "For backup planning or data audits, count records across res.partner, account.move, sale.order, stock.picking, ir.attachment, and other key models. Present as a summary table showing record counts per model."
+      "title": "Structure Multi-Step Diagnostics with Clear Sequencing",
+      "principle": "For complex diagnostics requiring multiple queries, establish a logical sequence: broad assessment \u2192 count anomalies \u2192 fetch details \u2192 cross-validate. This prevents redundant queries and ensures findings are actionable.",
+      "application": "In health checks: (1) odoo_doctor for overview, (2) odoo_search_count on flagged models to quantify issues, (3) odoo_search_read with limits to get specific records, (4) cross-reference related models to validate findings. Report results in priority order."
     }
   ],
   "task_specific_skills": [
     {
-      "id": "TS-BR-001",
-      "category": "backup-restore",
-      "title": "Gather Backup Metadata Efficiently",
-      "principle": "Use odoo_doctor for quick system overview, then supplement with targeted search_count queries on core models to estimate backup size and complexity.",
-      "application": "Start with odoo_doctor to get database name, version, and module status. Then use search_count on res.partner, account.move, sale.order, stock.picking, and ir.attachment to estimate data volume. This two-step approach provides comprehensive pre-backup assessment."
+      "id": "TS-HC-001",
+      "category": "health-check",
+      "title": "Systematic Health Check Protocol",
+      "principle": "Health checks should follow a structured two-phase approach: broad system assessment followed by targeted deep-dives into flagged areas.",
+      "application": "Phase 1: Run odoo_doctor for comprehensive system overview. Phase 2: Based on findings, use odoo_search_count and odoo_search_read on specific models (ir.cron, ir.module.module, ir.logging) to investigate issues. Aggregate results into severity-based summary."
     },
     {
-      "id": "TS-BR-002",
-      "category": "backup-restore",
-      "title": "Verify Data Integrity Before Backup",
-      "principle": "Execute a series of search_count queries across all major models to detect anomalies (zero records, unexpected counts) that indicate data corruption or incomplete migrations.",
-      "application": "Count records in res.partner, account.move, sale.order, stock.picking, account.invoice, stock.move, ir.attachment, and other core models. Compare counts to expected baselines. Flag any models with zero records or suspiciously low counts as potential issues."
+      "id": "TS-HC-002",
+      "category": "health-check",
+      "title": "Cron Job Health Assessment",
+      "principle": "Scheduled actions (ir.cron) require multi-model investigation: check job state, execution history, and recent logs to identify stuck or overdue jobs.",
+      "application": "Query ir.cron with state filters (active/inactive). Use odoo_search_count to detect stuck jobs (nextcall in past). Query ir.logging with cron-related filters to find execution failures. Cross-reference to identify jobs that are scheduled but failing silently."
     },
     {
-      "id": "TS-BR-003",
-      "category": "backup-restore",
-      "title": "Check Module Installation State Before Backup",
-      "principle": "Query ir.module.module and ir.module.module.dependency to detect pending installations or upgrades that should be completed before backup.",
-      "application": "Search for modules with state != 'installed' or state != 'uninstalled'. Check ir.module.module.dependency for broken dependencies. Report any pending operations that should be resolved before backup to ensure consistency."
-    },
-    {
-      "id": "TS-MC-001",
-      "category": "model-customize",
-      "title": "Inspect Current Defaults Before Setting New Ones",
-      "principle": "Always query ir.default records for a model before setting new defaults to understand existing configuration and avoid conflicts.",
-      "application": "Use odoo_search_read on ir.default with domain [('model_id', '=', 'model.name')] to see all current defaults. Review field names and values. Only then use odoo_set_default to add or modify defaults."
-    },
-    {
-      "id": "TS-MC-002",
-      "category": "model-customize",
-      "title": "Use odoo_model_info to Understand View and Action Structure",
-      "principle": "Before modifying views or actions, use odoo_model_info to understand the current structure, available views, and action configurations.",
-      "application": "Call odoo_model_info on the target model to see all views (list, form, kanban, etc.) and their IDs. Identify the window action and its current parameters. This prevents errors when using odoo_modify_action."
-    },
-    {
-      "id": "TS-MC-003",
-      "category": "model-customize",
-      "title": "Modify Actions with Complete Context",
-      "principle": "When changing action parameters (sorting, filtering, domain), first fetch the current action definition, then apply targeted modifications using odoo_modify_action.",
-      "application": "Use odoo_model_info to get the action ID. Query ir.actions.act_window to see current parameters. Use odoo_modify_action to update specific fields (context, domain, view_mode, view_ids). Verify changes with a follow-up query."
-    },
-    {
-      "id": "TS-MC-004",
-      "category": "model-customize",
-      "title": "Set Global Defaults via ir.default Systematically",
-      "principle": "Use odoo_set_default to configure field defaults at the model level, ensuring consistency across all users and sessions.",
-      "application": "For each field requiring a default, call odoo_set_default with model_id, field_id, and value. Verify by querying ir.default afterward. This approach is more reliable than modifying form views or using context."
+      "id": "TS-HC-003",
+      "category": "health-check",
+      "title": "Efficient Anomaly Detection via Count Queries",
+      "principle": "Use search_count strategically to detect anomalies before fetching full records, enabling rapid identification of problem areas without data overhead.",
+      "application": "For cron checks: search_count for jobs with nextcall < now() (overdue), search_count for jobs with state='failed', search_count for recent error logs. Report counts first; only fetch details if counts are non-zero and significant."
     }
   ],
   "common_mistakes": [
     {
       "id": "CM-001",
-      "mistake": "Fetching full records when only counts are needed",
-      "description": "Using search_read to get record counts instead of search_count, causing unnecessary data transfer and slower queries.",
-      "avoidance": "Always use odoo_search_count when you only need the quantity of records. Reserve search_read for when you need actual field values."
+      "mistake": "Fetching full record details when only counts are needed",
+      "consequence": "Unnecessary data transfer and slower response times, especially with large datasets.",
+      "prevention": "Always use odoo_search_count first when investigating 'are there any X?' questions. Only call odoo_search_read if you need specific field values or record details."
     },
     {
       "id": "CM-002",
-      "mistake": "Skipping model structure investigation before modification",
-      "description": "Attempting to modify views, actions, or defaults without first understanding the current model structure, leading to errors or incomplete changes.",
-      "avoidance": "Always call odoo_model_info or odoo_get_fields before making configuration changes. Understand the current state before modifying it."
+      "mistake": "Skipping odoo_get_fields before querying unfamiliar models",
+      "consequence": "Constructing incorrect domain filters, requesting non-existent fields, or missing key fields needed for analysis.",
+      "prevention": "Always call odoo_get_fields as the first step when working with a new model. Use the field information to inform your search_read queries and domain construction."
     },
     {
       "id": "CM-003",
-      "mistake": "Using generic write operations for configuration instead of specialized tools",
-      "description": "Attempting to set defaults or modify actions using generic write calls instead of odoo_set_default or odoo_modify_action, which handle Odoo-specific logic.",
-      "avoidance": "Use odoo_set_default for ir.default records and odoo_modify_action for ir.actions.act_window modifications. These tools encapsulate proper Odoo behavior."
+      "mistake": "Using odoo_doctor alone without follow-up targeted queries",
+      "consequence": "Identifying that a problem exists but lacking specific details needed to resolve it or understand root cause.",
+      "prevention": "Treat odoo_doctor as Phase 1 (broad assessment). Always follow up with targeted odoo_search_read/odoo_search_count queries on flagged models to drill into specifics."
     },
     {
       "id": "CM-004",
-      "mistake": "Not verifying related configuration before backup",
-      "description": "Performing backup assessment without checking for pending module installations, upgrades, or data inconsistencies that could cause restore issues.",
-      "avoidance": "Before backup, run odoo_doctor, check module states, and execute comprehensive search_count queries across all major models to detect anomalies."
+      "mistake": "Investigating single models in isolation without cross-referencing related models",
+      "consequence": "Missing hidden issues or incomplete understanding of system state (e.g., checking ir.cron state without checking ir.logging for execution failures).",
+      "prevention": "For system diagnostics, always identify and query related models. For cron: check ir.cron + ir.logging. For modules: check ir.module.module + ir.module.module.dependency. Cross-validate findings across models."
     },
     {
       "id": "CM-005",
-      "mistake": "Assuming all models exist without checking availability",
-      "description": "Querying models that may not be installed (e.g., manufacturing, quality modules) without first verifying they exist, causing RPC errors.",
-      "avoidance": "Use odoo_list_models or odoo_get_fields to verify model existence before querying. Handle missing models gracefully with explanations of required modules."
+      "mistake": "Constructing overly broad domain filters that retrieve excessive records",
+      "consequence": "Slow queries, large data transfers, and difficulty identifying the actual problem among noise.",
+      "prevention": "Use GS-002 (Use Domain Filters Precisely): always include state, type, date, and other specific filters. Prefer exact matches. Test domain filters with search_count first to verify scope before fetching records."
     }
   ]
 }
